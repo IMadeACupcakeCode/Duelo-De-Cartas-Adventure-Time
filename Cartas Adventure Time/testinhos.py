@@ -970,22 +970,54 @@ async def meme(ctx):
         await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
         return
 
-    memes = [
-        "https://media.tenor.com/3btxH8B8L4MAAAAC/meme-cat.gif",
-        "https://media.tenor.com/9bH3PXztJ6MAAAAC/meme-doge.gif",
-        "https://media.tenor.com/uYP_kE8iRWYAAAAC/meme-pepe.gif",
-        "https://media.tenor.com/8PJrM5x3l2IAAAAC/meme-this-is-fine.gif"
-    ]
+    # Lista todos os arquivos da pasta memes
+    memes_path = "./memes"
+    try:
+        all_files = os.listdir(memes_path)
+        # Filtra apenas arquivos de imagem/vídeo suportados
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4']
+        meme_files = [f for f in all_files if any(f.lower().endswith(ext) for ext in image_extensions)]
 
-    embed = discord.Embed(
-        title="😂 **Meme Aleatório**",
-        description="Aqui vai um meme pra alegrar seu dia!",
-        color=0xffd700
-    )
-    embed.set_image(url=random.choice(memes))
+        if not meme_files:
+            embed = discord.Embed(
+                title="😔 **Sem Memes**",
+                description="Não encontrei nenhum meme na pasta!",
+                color=0xe74c3c
+            )
+            await ctx.send(embed=embed)
+            return
 
-    await ctx.send(embed=embed)
-    log_write(f"Meme enviado por {ctx.author.name}")
+        # Seleciona um meme aleatório
+        selected_meme = random.choice(meme_files)
+        meme_path = os.path.join(memes_path, selected_meme)
+
+        # Cria embed baseado no tipo de arquivo
+        embed = discord.Embed(
+            title="😂 **Meme Aleatório**",
+            description=f"Arquivo: `{selected_meme}`",
+            color=0xffd700
+        )
+
+        # Verifica se é vídeo ou imagem
+        if selected_meme.lower().endswith('.mp4'):
+            # Para vídeos, envia o arquivo diretamente
+            await ctx.send(embed=embed)
+            await ctx.send(file=discord.File(meme_path))
+        else:
+            # Para imagens/GIFs, usa o embed
+            embed.set_image(url=f"attachment://{selected_meme}")
+            await ctx.send(embed=embed, file=discord.File(meme_path))
+
+        log_write(f"Meme '{selected_meme}' enviado por {ctx.author.name}")
+
+    except Exception as e:
+        embed = discord.Embed(
+            title="❌ **Erro**",
+            description="Ocorreu um erro ao buscar memes!",
+            color=0xe74c3c
+        )
+        await ctx.send(embed=embed)
+        log_write(f"Erro ao enviar meme: {e}")
 
 @bot.command()
 async def joke(ctx):
