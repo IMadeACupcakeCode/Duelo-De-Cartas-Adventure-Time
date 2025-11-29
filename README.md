@@ -1,94 +1,114 @@
-# README - Bot de Cartas Adventure Time (Card Wars)
+# 🤖 Duelo De Cartas - Adventure Time
 
-Este é um bot Discord para jogar Card Wars com cartas de Adventure Time. Ele permite visualizar detalhes e imagens das cartas de forma rápida e fácil.
+Bot de Discord para jogos de cartas baseado em Adventure Time com sistema completo de duelos!
 
-## Funcionalidades
-- Busca de cartas por nome.
-- Exibição de detalhes completos das cartas (tipo, custo, ataque, defesa, etc.).
-- Visualização de imagens das cartas.
-- Suporte a prefixos `$` ou menção ao bot (`@bot`).
-- Busca exata com aspas.
-- Sistema de duelos entre usuários.
-- Comandos de lazer (memes, piadas, insultos, etc.).
-- Restrições de canais e roles para controle de uso.
+## 🎮 Funcionalidades
 
-## Permissões e Funcionamento
-- **Mensagens automáticas**: O bot envia mensagens de boas-vindas apenas em canais cujo nome contenha palavras relacionadas a cartas: "cartas", "guerra de cartas", "card wars", "card" ou "war".
-- **Comandos**: Todos os usuários podem usar comandos do bot em qualquer canal onde o bot tenha permissões para enviar mensagens.
-- **Sem restrições de roles**: Não há necessidade de roles especiais para interagir com o bot.
-- **Sistema de inatividade**: O bot monitora atividade em todos os canais e envia avisos quando necessário.
+- **Sistema de Seleção de Servidores**: Escolha quais servidores o bot funcionará antes da ativação
+- **Busca de Cartas**: Visualize detalhes e imagens das cartas rapidamente
+- **Sistema de Duelos**: Batalhe contra outros usuários com decks aleatórios
+- **Comandos de Lazer**: Memes, piadas, insultos e jogos divertidos
+- **Controle de Rate Limiting**: Evita bloqueios do Discord
 
-## Requisitos
-- Python 3.8 ou superior.
-- Biblioteca discord.py (instalada automaticamente no Passo 1).
+## 🚀 Como Usar
 
-## Passo 1: Instalação
-1. Instale o Python (versão 3.8 ou superior) se não tiver.
-2. Instale a biblioteca discord.py: Abra o terminal e execute:
-   ```
-   pip install discord.py
-   ```
-
-## Passo 2: Criar o Bot no Discord
-1. Vá para [https://discord.com/developers/applications](https://discord.com/developers/applications).
-2. Clique em "New Application" e dê um nome (ex: Card Wars Bot).
-3. Na aba "Bot", clique em "Add Bot".
-4. **Importante:** Na seção "Privileged Gateway Intents", ative "Message Content Intent".
-5. Copie o "Token" (guarde em segredo).
-6. Na aba "General Information", copie o "Application ID".
-7. Vá para `https://discord.com/api/oauth2/authorize?client_id=SEU_APPLICATION_ID&permissions=2048&scope=bot`
-   Substitua `SEU_APPLICATION_ID` e autorize o bot no seu servidor.
-
-## Passo 3: Preparar os Arquivos
-1. No diretório do código (onde está `testinhos.py`), certifique-se de ter o arquivo `cards.csv` com os dados das cartas.
-   - Formato CSV: Nome,Descrição,Tipo,Paisagem,Custo,ATA,DEF,?,Baralho/Quantidade,Conjunto
-   - Exemplo:
-     ```
-     Jake,"O cachorro amarelo amigo do Finn","Creature","Forest","2","3","4","","Forest Deck","Base Set"
-     ```
-
-2. Certifique-se de ter a pasta `images/` com imagens .jpg/.png das cartas, nomeadas exatamente como os nomes das cartas (ex: `Jake.jpg`).
-
-## Passo 4: Configurar o Código
-1. Instale a biblioteca python-dotenv: `pip install python-dotenv`
-2. Crie um arquivo `.env` no diretório do código com:
+### Passo 1: Configuração Inicial
+1. Configure seu arquivo `.env` com o token do bot:
    ```
    DISCORD_TOKEN=SEU_TOKEN_AQUI
-   BOT_ICON_URL=https://tse3.mm.bing.net/th/id/OIP.UWjdkRvAf4Ez6L-sbeIenAHaFl?w=589&h=444&rs=1&pid=ImgDetMain&o=7&rm=3
-   CARD_IMAGES_URL=https://yourserver.com/cardwarsimages/{}.jpg
+   BOT_ICON_URL=https://exemplo.com/icon.jpg
+   CARD_IMAGES_URL=https://exemplo.com/cards/{}.jpg
    OWNER_ID=SEU_ID_DO_DISCORD
    ```
-3. Substitua os valores pelos seus próprios (token do bot, URL do ícone, URL das imagens, seu ID do Discord).
 
-## Passo 5: Executar o Bot
-1. Abra o terminal no diretório do código.
-2. Execute: `python testinhos.py`
-3. O bot deve aparecer online no seu servidor com status "Card Wars".
+### Passo 2: Seleção de Servidores
+Execute o script de seleção antes de ativar o bot:
 
-## Tabela de Comandos
+```bash
+cd "Cartas Adventure Time"
+python select_servers.py
+```
 
-| Comando | Descrição | Exemplo |
-|---------|-----------|---------|
-| `$help` | Mostra ajuda nas DMs. | `$help` |
-| `$c [nome da carta]` | Mostra detalhes da carta em embed. | `$c Jake` |
-| `$img [nome da carta]` | Envia a imagem da carta. | `$img Jake` |
-| `$c [número]` | Seleciona carta de múltiplos resultados para detalhes. | `$c 1` |
-| `$img [número]` | Seleciona carta de múltiplos resultados para imagem. | `$img 2` |
-| **Duelos:** | | |
-| `$duel @usuário` | Inicia um duelo com decks aleatórios. | `$duel @amigo` |
-| `$hand` | Mostra sua mão de cartas. | `$hand` |
-| `$summon [índice]` | Convoca criatura da mão (gasta mana). | `$summon 1` |
-| `$attack [índice] [alvo]` | Ataca com criatura (alvo: número ou 'player'). | `$attack 1 2` ou `$attack 1 player` |
-| `$draw` | Compra uma carta extra. | `$draw` |
-| `$board` | Mostra o campo de batalha. | `$board` |
-| `$rules` | Mostra as regras do jogo. | `$rules` |
-| `$endturn` | Passa turno (oponente ganha mana e compra). | `$endturn` |
-| `$duelstatus` | Mostra HP e turno. | `$duelstatus` |
-| `$endduel` | Encerra o duelo. | `$endduel` |
-| **Lazer:** | | |
-| `$meme` | Envia um meme aleatório. | `$meme` |
-| `$joke` | Conta uma piada aleatória. | `$joke` |
-| `$insult [@usuário]` | Insulta o usuário mencionado (aleatório se não marcar). | `$insult @user` |
-| `$quote` | Citação famosa de jogos. | `$quote` |
-| `$roll [lados] [quantidade]` | Rola dados e soma. | `$roll 6 2` |
-| `$flip` | Cara ou coroa. | `$flip` |
+**Exemplo de saída:**
+```
+============================================================
+🤖 SELEÇÃO DE SERVIDORES PARA O BOT
+============================================================
+
+📋 Servidores disponíveis (3):
+ 1. CoreVerse (1 membros)
+ 2. Confeitaria Esquizofrênica (1 membros)
+ 3. Servidor De Testes (1 membros)
+
+📝 Instruções:
+• Digite os números dos servidores separados por vírgula (ex: 1,3,5)
+• Digite 'all' para selecionar todos
+• Digite 'none' para não selecionar nenhum
+• Deixe vazio para usar apenas o primeiro servidor
+----------------------------------------
+🎯 Escolha os servidores: 1,3
+
+✅ 2 servidor(es) selecionado(s): CoreVerse, Servidor De Testes
+```
+
+### Passo 3: Ativar o Bot
+Após a seleção, execute o bot principal:
+
+```bash
+python testinhos.py
+```
+
+## 📋 Comandos Disponíveis
+
+### 🔍 **Busca de Cartas**
+- `$c [nome]` - Mostra detalhes completos da carta
+- `$img [nome]` - Mostra apenas a imagem da carta
+- `$c [número]` - Seleciona carta de resultados múltiplos
+
+### ⚔️ **Sistema de Duelos**
+- `$duel @usuário` - Inicia duelo com decks aleatórios
+- `$hand` - Mostra sua mão de cartas
+- `$summon [índice]` - Convoca uma criatura
+- `$attack [índice] player` - Ataca o oponente diretamente
+- `$draw` - Compra uma carta extra
+- `$board` - Mostra o campo de batalha
+- `$endturn` - Passa o turno
+- `$endduel` - Encerra o duelo
+
+### 🎲 **Comandos de Lazer**
+- `$meme` - Envia meme aleatório
+- `$joke` - Conta uma piada
+- `$insult [@usuário]` - Insulta alguém
+- `$roll [lados] [quantidade]` - Rola dados
+- `$flip` - Cara ou coroa
+
+## ⚙️ Arquivos Necessários
+
+- `cards.csv` - Dados das cartas
+- `images/` - Pasta com imagens das cartas
+- `memes/` - Pasta com memes (opcional)
+- `.env` - Configurações do bot
+
+## 🔧 Solução de Problemas
+
+### Rate Limiting
+- O bot controla automaticamente o envio de mensagens
+- Selecione apenas os servidores necessários
+
+### Comandos Não Respondem
+- Verifique se o servidor foi selecionado
+- Certifique-se de que o bot tem permissões
+
+### Seleção de Servidores
+- Execute `python select_servers.py` primeiro
+- A seleção é salva em `selected_guilds.txt`
+
+## 📝 Notas Técnicas
+
+- Linguagem: Python 3.8+
+- Biblioteca: discord.py
+- Rate limiting controlado automaticamente
+- Logs salvos em `log.log`
+
+---
+**🎮 Divirta-se duelando com cartas de Adventure Time!**
