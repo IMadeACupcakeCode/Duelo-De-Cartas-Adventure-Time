@@ -35,6 +35,9 @@ intents.reactions = True
 bot = commands.Bot(command_prefix='$', intents=intents)
 bot.remove_command('help')
 
+# Armazenar o canal de boas-vindas para cada servidor
+welcome_channels = {}
+
 # Carregar cartas do CSV
 all_cards = []
 with open('./cards.csv', newline='', encoding='utf-8') as csvfile:
@@ -69,6 +72,13 @@ duel_message_ids = {}  # user_id: message_id do status
 def can_send_in_channel(channel):
     """Verifica se o bot pode enviar mensagens no canal."""
     return channel.permissions_for(channel.guild.me).send_messages
+
+def is_welcome_channel(ctx):
+    """Verifica se o comando foi executado no canal de boas-vindas."""
+    guild_id = ctx.guild.id
+    if guild_id in welcome_channels:
+        return ctx.channel.id == welcome_channels[guild_id]
+    return False
 
 async def send_shutdown_message():
     embed = discord.Embed(description="Toda Terça Têm De Novo, A Parada É Semanal... Falow!", color=0xfff100)
@@ -106,6 +116,7 @@ async def on_ready():
         if target_channel:
             try:
                 await target_channel.send(embed=embed)
+                welcome_channels[guild.id] = target_channel.id  # Armazenar o canal de boas-vindas
                 log_write(f"Welcome message sent to {target_channel.name} in {guild.name}")
             except Exception as e:
                 log_write(f"Failed to send welcome message to {target_channel.name}: {e}")
@@ -190,7 +201,71 @@ async def on_command_error(ctx, error):
     log_write("")
 
 @bot.command()
+async def help(ctx):
+    """Mostra os comandos disponíveis no servidor."""
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    embed = discord.Embed(
+        title="🎮 **Guerra De Cartas - Comandos Disponíveis**",
+        description="Bem-vindo ao bot de Card Wars! Aqui estão todos os comandos disponíveis:",
+        color=0xfff100
+    )
+
+    embed.add_field(
+        name="🔍 **Busca de Cartas**",
+        value="`$c [nome da carta]` - Mostra detalhes completos da carta\n"
+              "`$img [nome da carta]` - Mostra apenas a imagem da carta\n"
+              "`$c [número]` - Seleciona carta de resultados múltiplos\n"
+              "`$img [número]` - Seleciona imagem de resultados múltiplos",
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚔️ **Sistema de Duelos**",
+        value="`$duel @usuário` - Inicia um duelo com decks aleatórios\n"
+              "`$hand` - Mostra sua mão de cartas\n"
+              "`$summon [índice]` - Convoca uma criatura da mão\n"
+              "`$attack [índice] [alvo]` - Ataca com uma criatura\n"
+              "`$draw` - Compra uma carta extra\n"
+              "`$board` - Mostra o campo de batalha\n"
+              "`$rules` - Mostra as regras do jogo\n"
+              "`$endturn` - Passa o turno\n"
+              "`$duelstatus` - Mostra HP e turno atual\n"
+              "`$endduel` - Encerra o duelo",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎲 **Comandos de Lazer**",
+        value="`$meme` - Envia um meme aleatório\n"
+              "`$joke` - Conta uma piada\n"
+              "`$insult [@usuário]` - Insulta alguém (aleatório se não marcar)\n"
+              "`$quote` - Citação famosa de jogos\n"
+              "`$roll [lados] [quantidade]` - Rola dados\n"
+              "`$flip` - Cara ou coroa",
+        inline=False
+    )
+
+    embed.add_field(
+        name="💡 **Dicas**",
+        value="• Use aspas para busca exata: `$c \"Jake\"`\n"
+              "• Limite de 24 resultados por busca\n"
+              "• Todos os comandos funcionam apenas neste canal!",
+        inline=False
+    )
+
+    embed.set_footer(text="Bot criado com ❤️ para amantes de Card Wars!")
+
+    await ctx.send(embed=embed)
+
+@bot.command()
 async def c(ctx, *, arg):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
     embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
@@ -231,6 +306,10 @@ async def c(ctx, *, arg):
 
 @bot.command()
 async def img(ctx, *, arg):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
     embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
