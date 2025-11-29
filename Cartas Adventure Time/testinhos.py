@@ -184,18 +184,61 @@ async def on_command_error(ctx, error):
         ]
         await ctx.send(random.choice(irritated_insults))
 
-    # Tentar sugerir comando similar
+    # Tentar sugerir comando similar com embed bonito
     import difflib
     message = ctx.message.content[len(bot.command_prefix):].split()[0] if ctx.message.content.startswith(bot.command_prefix) else ctx.message.content.split()[0]
     commands = [cmd.name for cmd in bot.commands]
     close_matches = difflib.get_close_matches(message, commands, n=1, cutoff=0.6)
+
     if close_matches:
-        suggestion = f"Talvez você quis dizer: `${close_matches[0]}`?"
+        # Criar embed elegante para a sugestão
+        suggestion_embed = discord.Embed(
+            title="💡 **Oops! Comando não encontrado**",
+            description=f"Não encontrei o comando `${message}`, mas talvez você quis dizer isso:",
+            color=0x3498db
+        )
+
+        suggested_command = close_matches[0]
+        suggestion_embed.add_field(
+            name="🎯 **Sugestão**",
+            value=f"```${suggested_command}```",
+            inline=False
+        )
+
+        # Adicionar contexto irritado se necessário
         if user_errors[user_id] >= IRRIATION_LIMIT:
-            suggestion += f" Mas como você é burro, provavelmente erra isso também!"
-        await ctx.send(suggestion)
+            suggestion_embed.add_field(
+                name="😤 **Dica do Bot**",
+                value="Mas como você é burro, provavelmente erra isso também! 😏",
+                inline=False
+            )
+            suggestion_embed.set_footer(text="💀 Pratique mais, campeão!")
+        else:
+            suggestion_embed.add_field(
+                name="✨ **Como usar**",
+                value=f"Tente: `${suggested_command} [argumentos]`",
+                inline=False
+            )
+            suggestion_embed.set_footer(text="🤖 Bot criado com ❤️ para Card Wars!")
+
+        await ctx.send(embed=suggestion_embed)
     else:
-        await ctx.send("Comandos disponíveis: $help")
+        # Embed quando não há sugestões
+        no_suggestion_embed = discord.Embed(
+            title="❓ **Comando não encontrado**",
+            description="Não consegui encontrar nenhum comando similar. Use `$help` para ver todos os comandos disponíveis!",
+            color=0xe74c3c
+        )
+
+        no_suggestion_embed.add_field(
+            name="📚 **Precisa de ajuda?**",
+            value="Digite `$help` para ver a lista completa de comandos!",
+            inline=False
+        )
+
+        no_suggestion_embed.set_footer(text="🎮 Guerra De Cartas - Seu bot favorito!")
+
+        await ctx.send(embed=no_suggestion_embed)
 
     log_write("No arguments given with $c lol")
     log_write("")
