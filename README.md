@@ -12,11 +12,11 @@ Este é um bot Discord para jogar Card Wars com cartas de Adventure Time. Ele pe
 - Comandos de lazer (memes, piadas, insultos, etc.).
 - Restrições de canais e roles para controle de uso.
 
-## Permissões e Restrições
-- O bot só envia mensagens automáticas (boas-vindas, avisos de inatividade, shutdown) em canais cujo nome contenha "guerra de cartas" ou "card war".
-- Para usar comandos, o usuário deve ter uma role no servidor com nome contendo "guerra de cartas" ou "card war".
-- Se o usuário não tiver a role, receberá uma mensagem de erro ao tentar usar comandos.
-- Isso permite controlar quem pode interagir com o bot e em quais canais ele opera.
+## Permissões e Funcionamento
+- **Mensagens automáticas**: O bot envia mensagens de boas-vindas apenas em canais cujo nome contenha palavras relacionadas a cartas: "cartas", "guerra de cartas", "card wars", "card" ou "war".
+- **Comandos**: Todos os usuários podem usar comandos do bot em qualquer canal onde o bot tenha permissões para enviar mensagens.
+- **Sem restrições de roles**: Não há necessidade de roles especiais para interagir com o bot.
+- **Sistema de inatividade**: O bot monitora atividade em todos os canais e envia avisos quando necessário.
 
 ## Requisitos
 - Python 3.8 ou superior.

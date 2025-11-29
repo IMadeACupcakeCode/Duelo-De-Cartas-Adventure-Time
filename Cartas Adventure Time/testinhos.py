@@ -21,6 +21,14 @@ def log_write(text):
 log_write("Starting BOT!!!")
 
 TOKEN = os.getenv('DISCORD_TOKEN')
+if not TOKEN:
+    log_write("ERROR: DISCORD_TOKEN not found in .env file!")
+    exit(1)
+if TOKEN == "SEU_TOKEN_AQUI":
+    log_write("ERROR: Please set your real Discord token in .env file!")
+    exit(1)
+
+log_write(f"Token loaded: {TOKEN[:20]}...")
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
@@ -58,20 +66,16 @@ duel_max_mana = {} # user_id: max mana
 duel_graveyard = {} # user_id: list of discarded cards
 duel_message_ids = {}  # user_id: message_id do status
 
-def is_valid_channel(channel):
-    """Verifica se o canal é válido para enviar mensagens: nome contém 'guerra de cartas' ou similar."""
-    return "guerra de cartas" in channel.name.lower() or "card war" in channel.name.lower()
-
-def has_card_war_role(member):
-    """Verifica se o membro tem uma role com nome contendo 'guerra de cartas' ou similar."""
-    return any("guerra de cartas" in role.name.lower() or "card war" in role.name.lower() for role in member.roles)
+def can_send_in_channel(channel):
+    """Verifica se o bot pode enviar mensagens no canal."""
+    return channel.permissions_for(channel.guild.me).send_messages
 
 async def send_shutdown_message():
     embed = discord.Embed(description="Toda Terça Têm De Novo, A Parada É Semanal... Falow!", color=0xfff100)
     embed.set_image(url="https://i.imgur.com/FLiISC7.gif")
     for guild in bot.guilds:
         for channel in guild.text_channels:
-            if channel.permissions_for(guild.me).send_messages and is_valid_channel(channel):
+            if can_send_in_channel(channel):
                 try:
                     await channel.send(embed=embed)
                 except:
@@ -80,27 +84,40 @@ async def send_shutdown_message():
 
 @bot.event
 async def on_ready():
+    log_write('Bot successfully connected to Discord!')
     await bot.change_presence(activity=discord.Game(name='Card Wars'))
     log_write('We have logged in as {0.user}'.format(bot))
-    # Enviar no primeiro canal válido disponível
+    # Enviar mensagem de boas-vindas apenas em canais com palavras-chave relacionadas a cartas
+    embed = discord.Embed(title="**🎮 Hora Do Games! Guerra De Cartas, Seus Mangolóides! Ohooooow**", description="O bot tá ligado e pronto pra zoar geral! Use `$help` pra ver os comandos e começar a guerra!", color=0xfff100)
+    embed.set_image(url="https://media.tenor.com/tIqmPatn9J0AAAAM/vivian-james-vivian.gif")
+
+    card_keywords = ["cartas", "guerra de cartas", "card wars", "card", "war"]
+
     for guild in bot.guilds:
         target_channel = None
+        # Procurar por canal com palavras-chave relacionadas a cartas no nome
         for channel in guild.text_channels:
-            if is_valid_channel(channel) and channel.permissions_for(guild.me).send_messages:
+            channel_name_lower = channel.name.lower()
+            if any(keyword in channel_name_lower for keyword in card_keywords) and can_send_in_channel(channel):
                 target_channel = channel
                 break
+
+        # Só enviar se encontrou um canal apropriado
         if target_channel:
-            embed = discord.Embed(title="**🎮 Hora Do Games! Guerra De Cartas, Seus Mangolóides! Ohooooow**", description="O bot tá ligado e pronto pra zoar geral! Use `$help` pra ver os comandos e começar a guerra!", color=0xfff100)
-            embed.set_image(url="https://media.tenor.com/tIqmPatn9J0AAAAM/vivian-james-vivian.gif")
-            await target_channel.send(embed=embed)
-        break
+            try:
+                await target_channel.send(embed=embed)
+                log_write(f"Welcome message sent to {target_channel.name} in {guild.name}")
+            except Exception as e:
+                log_write(f"Failed to send welcome message to {target_channel.name}: {e}")
+        else:
+            log_write(f"No suitable channel found in {guild.name} for welcome message")
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
-    # Atualizar atividade apenas em canais válidos
-    if is_valid_channel(message.channel):
+    # Atualizar atividade em todos os canais onde o bot pode ver mensagens
+    if can_send_in_channel(message.channel):
         last_activity[message.channel.id] = datetime.datetime.now()
         inactive_channels.discard(message.channel.id)  # Remover se estava inativo
     await bot.process_commands(message)
@@ -112,7 +129,7 @@ async def inactivity_check():
         if (now - last_time).total_seconds() > 1800:  # 30 minutos
             if channel_id not in inactive_channels:
                 channel = bot.get_channel(channel_id)
-                if channel and is_valid_channel(channel) and channel.permissions_for(channel.guild.me).send_messages:
+                if channel and can_send_in_channel(channel):
                     embed = discord.Embed(description="Toda Terça Têm De Novo, A Parada É Semanal... Falow!", color=0xfff100)
                     embed.set_image(url="https://i.imgur.com/FLiISC7.gif")
                     await channel.send(embed=embed)
@@ -121,9 +138,6 @@ async def inactivity_check():
 
 @bot.event
 async def on_command_error(ctx, error):
-    if not has_card_war_role(ctx.author):
-        await ctx.send("Você não tem a role 'Guerra De Cartas' para usar comandos!")
-        return
     user_id = ctx.author.id
     user_errors[user_id] = user_errors.get(user_id, 0) + 1
 
@@ -177,9 +191,6 @@ async def on_command_error(ctx, error):
 
 @bot.command()
 async def c(ctx, *, arg):
-    if not has_card_war_role(ctx.author):
-        await ctx.send("Você não tem a role 'Guerra De Cartas' para usar este comando!")
-        return
     embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
@@ -220,9 +231,6 @@ async def c(ctx, *, arg):
 
 @bot.command()
 async def img(ctx, *, arg):
-    if not has_card_war_role(ctx.author):
-        await ctx.send("Você não tem a role 'Guerra De Cartas' para usar este comando!")
-        return
     embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
@@ -368,3 +376,13 @@ async def img(ctx, *, arg):
             await ctx.send(embed=embed)
             log_write(returned_card[0])
             log_write("")
+
+# Tratamento de erros de login
+try:
+    bot.run(TOKEN)
+except discord.LoginFailure as e:
+    log_write(f"ERROR: Falha no login - Token inválido ou expirado: {e}")
+    print("ERRO: Token do Discord inválido! Verifique o arquivo .env")
+except Exception as e:
+    log_write(f"ERROR: Erro ao conectar bot: {e}")
+    print(f"ERRO: Falha ao conectar bot: {e}")
