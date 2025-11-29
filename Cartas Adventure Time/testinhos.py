@@ -38,6 +38,9 @@ bot.remove_command('help')
 # Armazenar o canal de boas-vindas para cada servidor
 welcome_channels = {}
 
+# Servidores selecionados para funcionamento
+selected_guilds = set()
+
 # Carregar cartas do CSV
 all_cards = []
 with open('./cards.csv', newline='', encoding='utf-8') as csvfile:
@@ -55,9 +58,7 @@ def get_card_data(card_name):
 # Dicionário para armazenar últimos resultados de busca por usuário
 last_search = {}
 
-# Sistema de irritação: conta erros de comando por usuário
-user_errors = {}  # user_id: count
-IRRIATION_LIMIT = 3  # Após 3 erros, começa a xingar
+
 
 # Sistema de inatividade: última atividade por canal
 last_activity = {}  # channel_id: timestamp
@@ -73,12 +74,7 @@ def can_send_in_channel(channel):
     """Verifica se o bot pode enviar mensagens no canal."""
     return channel.permissions_for(channel.guild.me).send_messages
 
-def is_welcome_channel(ctx):
-    """Verifica se o comando foi executado no canal de boas-vindas."""
-    guild_id = ctx.guild.id
-    if guild_id in welcome_channels:
-        return ctx.channel.id == welcome_channels[guild_id]
-    return False
+
 
 async def send_shutdown_message():
     embed = discord.Embed(description="Toda Terça Têm De Novo, A Parada É Semanal... Falow!", color=0xfff100)
@@ -92,18 +88,126 @@ async def send_shutdown_message():
                     pass
     log_write("Bot shutting down...")
 
+def select_guilds_sync():
+    """Função para seleção síncrona de servidores no terminal."""
+    global selected_guilds
+
+    print("\n" + "="*60)
+    print("🤖 SELEÇÃO DE SERVIDORES PARA O BOT")
+    print("="*60)
+
+    if not bot.guilds:
+        print("❌ Nenhum servidor encontrado!")
+        return
+
+    print(f"\n📋 Servidores disponíveis ({len(bot.guilds)}):")
+    print("-" * 40)
+
+    guild_list = []
+    for i, guild in enumerate(bot.guilds, 1):
+        member_count = len(guild.members)
+        print(f"{i:2d}. {guild.name} ({member_count} membros)")
+        guild_list.append(guild)
+
+        print("\n" + "-" * 40)
+        print("📝 Instruções:")
+        print("• Digite o ID do servidor ou números sequenciais separados por vírgula (ex: 123456789,2)")
+        print("• Digite 'all' para selecionar todos")
+        print("• Digite 'none' para não selecionar nenhum")
+        print("• Deixe vazio para usar apenas o primeiro servidor")
+        print("-" * 40)
+
+    while True:
+        try:
+            choice = input("🎯 Escolha os servidores: ").strip().lower()
+
+            if choice == 'all':
+                selected_guilds = {guild.id for guild in guild_list}
+                print(f"✅ Todos os {len(guild_list)} servidores selecionados!")
+                break
+            elif choice == 'none':
+                selected_guilds = set()
+                print("✅ Nenhum servidor selecionado!")
+                break
+            elif choice == '':
+                if guild_list:
+                    selected_guilds = {guild_list[0].id}
+                    print(f"✅ Primeiro servidor selecionado: {guild_list[0].name}")
+                break
+            else:
+                # Parse dos números
+                indices = []
+                for part in choice.split(','):
+                    part = part.strip()
+                    if part.isdigit():
+                        idx = int(part)
+                        if 1 <= idx <= len(guild_list):
+                            indices.append(idx - 1)
+                        else:
+                            print(f"⚠️ Número {idx} inválido (deve ser entre 1 e {len(guild_list)})")
+                            indices = []
+                            break
+
+                if indices:
+                    selected_guilds = {guild_list[i].id for i in indices}
+                    selected_names = [guild_list[i].name for i in indices]
+                    print(f"✅ {len(selected_guilds)} servidor(es) selecionado(s): {', '.join(selected_names)}")
+                    break
+                else:
+                    print("❌ Entrada inválida. Tente novamente.")
+
+        except KeyboardInterrupt:
+            print("\n❌ Seleção cancelada pelo usuário.")
+            selected_guilds = set()
+            break
+        except Exception as e:
+            print(f"❌ Erro: {e}")
+            selected_guilds = set()
+            break
+
+    print(f"\n🎮 Servidores ativos: {len(selected_guilds)}")
+    print("="*60)
+
 @bot.event
 async def on_ready():
     log_write('Bot successfully connected to Discord!')
     await bot.change_presence(activity=discord.Game(name='Card Wars'))
     log_write('We have logged in as {0.user}'.format(bot))
-    # Enviar mensagem de boas-vindas apenas em canais com palavras-chave relacionadas a cartas
+
+    # Carregar seleção de servidores do arquivo
+    global selected_guilds
+    try:
+        with open('selected_guilds.txt', 'r') as f:
+            selected_guilds = set(int(line.strip()) for line in f if line.strip())
+        log_write(f"Loaded selected guilds from file: {len(selected_guilds)} guilds")
+    except FileNotFoundError:
+        log_write("No selected_guilds.txt file found - bot will work on all guilds")
+        selected_guilds = {guild.id for guild in bot.guilds}
+
+    # Debug: mostrar todos os servidores disponíveis
+    print(f"\n📋 Todos os servidores disponíveis:")
+    for guild in bot.guilds:
+        print(f"  {guild.id}: {guild.name}")
+    print(f"📋 Servidores selecionados: {selected_guilds}")
+
+    # Mostrar servidores ativos
+    print(f"\n🎮 Bot ativado em {len(selected_guilds)} servidor(es) selecionado(s)")
+    for guild in bot.guilds:
+        if guild.id in selected_guilds:
+            print(f"✅ {guild.name}")
+        else:
+            print(f"❌ {guild.name} (não selecionado)")
+
+    # Enviar mensagem de boas-vindas apenas nos servidores selecionados
     embed = discord.Embed(title="**🎮 Hora Do Games! Guerra De Cartas, Seus Mangolóides! Ohooooow**", description="O bot tá ligado e pronto pra zoar geral! Use `$help` pra ver os comandos e começar a guerra!", color=0xfff100)
     embed.set_image(url="https://media.tenor.com/tIqmPatn9J0AAAAM/vivian-james-vivian.gif")
 
     card_keywords = ["cartas", "guerra de cartas", "card wars", "card", "war"]
 
     for guild in bot.guilds:
+        if guild.id not in selected_guilds:
+            continue  # Pular servidores não selecionados
+
         target_channel = None
         # Procurar por canal com palavras-chave relacionadas a cartas no nome
         for channel in guild.text_channels:
@@ -127,6 +231,11 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
+
+    # Verificar se o servidor está selecionado
+    if message.guild and message.guild.id not in selected_guilds:
+        return  # Ignorar mensagens de servidores não selecionados
+
     # Atualizar atividade em todos os canais onde o bot pode ver mensagens
     if can_send_in_channel(message.channel):
         last_activity[message.channel.id] = datetime.datetime.now()
@@ -149,99 +258,29 @@ async def inactivity_check():
 
 @bot.event
 async def on_command_error(ctx, error):
-    user_id = ctx.author.id
-    user_errors[user_id] = user_errors.get(user_id, 0) + 1
-
-    # Frases de erro aleatórias
-    error_phrases = [
-        "Aprende a escrever certo, energumeno... O comando tá errado!",
-        "Seu burro, aprende a digitar direito!",
-        "Comando errado, seu analfabeto!",
-        "Você é burro demais para usar comandos simples!",
-        "Erro no comando, seu imbecil!",
-        "Escreve direito, seu ignorante!",
-        "Comando inválido, seu idiota!",
-        "Você é tão burro que nem comandos consegue usar!",
-        "Erro de digitação, seu estúpido!",
-        "Aprende a escrever, seu retardado!"
-    ]
-    await ctx.send(random.choice(error_phrases))
-    await ctx.send("https://media.tenor.com/qvvKGZhH0ysAAAAC/anime-girl.gif")
-
-    # Se irritado, adicionar insulto ácido
-    if user_errors[user_id] >= IRRIATION_LIMIT:
-        irritated_insults = [
-            f"{ctx.author.mention}, você é tão burro que até o comando errado você erra!",
-            f"{ctx.author.mention}, sua inteligência é zero: nem erro consegue cometer direito!",
-            f"{ctx.author.mention}, você é um fracasso ambulante: erra até comandos simples!",
-            f"{ctx.author.mention}, sua vida é uma merda, e agora você fede o chat com erros!",
-            f"{ctx.author.mention}, você é como Bolsonaro: mente, erra e ainda acha que está certo!",
-            f"{ctx.author.mention}, Lula roubou bilhões, mas você rouba minha paciência com erros!",
-            f"{ctx.author.mention}, você é tão gordo de burro que nem cabe no chat!",
-            f"{ctx.author.mention}, sua mãe deve ter caído na cabeça quando te pariu!",
-            f"{ctx.author.mention}, você é um aborto que sobreviveu: erro de nascimento!",
-            f"{ctx.author.mention}, seu pau é tão pequeno quanto sua inteligência!"
-        ]
-        await ctx.send(random.choice(irritated_insults))
-
-    # Tentar sugerir comando similar com embed bonito
-    import difflib
-    message = ctx.message.content[len(bot.command_prefix):].split()[0] if ctx.message.content.startswith(bot.command_prefix) else ctx.message.content.split()[0]
-    commands = [cmd.name for cmd in bot.commands]
-    close_matches = difflib.get_close_matches(message, commands, n=1, cutoff=0.6)
-
-    if close_matches:
-        # Criar embed elegante para a sugestão
-        suggestion_embed = discord.Embed(
-            title="💡 **Oops! Comando não encontrado**",
-            description=f"Não encontrei o comando `${message}`, mas talvez você quis dizer isso:",
-            color=0x3498db
-        )
-
-        suggested_command = close_matches[0]
-        suggestion_embed.add_field(
-            name="🎯 **Sugestão**",
-            value=f"```${suggested_command}```",
-            inline=False
-        )
-
-        # Adicionar contexto irritado se necessário
-        if user_errors[user_id] >= IRRIATION_LIMIT:
-            suggestion_embed.add_field(
-                name="😤 **Dica do Bot**",
-                value="Mas como você é burro, provavelmente erra isso também! 😏",
-                inline=False
-            )
-            suggestion_embed.set_footer(text="💀 Pratique mais, campeão!")
-        else:
-            suggestion_embed.add_field(
-                name="✨ **Como usar**",
-                value=f"Tente: `${suggested_command} [argumentos]`",
-                inline=False
-            )
-            suggestion_embed.set_footer(text="🤖 Bot criado com ❤️ para Card Wars!")
-
-        await ctx.send(embed=suggestion_embed)
+    # Obter o comando usado
+    if ctx.message.content.startswith(bot.command_prefix):
+        command_name = ctx.message.content[len(bot.command_prefix):].split()[0]
     else:
-        # Embed quando não há sugestões
-        no_suggestion_embed = discord.Embed(
-            title="❓ **Comando não encontrado**",
-            description="Não consegui encontrar nenhum comando similar. Use `$help` para ver todos os comandos disponíveis!",
-            color=0xe74c3c
-        )
+        command_name = ctx.message.content.split()[0]
 
-        no_suggestion_embed.add_field(
-            name="📚 **Precisa de ajuda?**",
-            value="Digite `$help` para ver a lista completa de comandos!",
-            inline=False
-        )
+    # Criar embed simples de erro
+    embed = discord.Embed(
+        title="❓ **Comando não encontrado**",
+        description=f"Não encontrei o comando `${command_name}`. Use `$help` para ver todos os comandos disponíveis!",
+        color=0xff6b6b
+    )
 
-        no_suggestion_embed.set_footer(text="🎮 Guerra De Cartas - Seu bot favorito!")
+    embed.add_field(
+        name="💡 **Dica**",
+        value="Verifique se digitou o comando corretamente. Todos os comandos começam com `$`.",
+        inline=False
+    )
 
-        await ctx.send(embed=no_suggestion_embed)
+    embed.set_footer(text="🤖 Bot criado com ❤️ para Card Wars!")
 
-    log_write("No arguments given with $c lol")
-    log_write("")
+    await ctx.send(embed=embed)
+    log_write(f"Command error: {command_name} - {error}")
 
 @bot.command()
 async def help(ctx):
@@ -417,10 +456,6 @@ async def c(ctx, *, arg):
 
 @bot.command()
 async def img(ctx, *, arg):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     user_id = ctx.author.id
 
     # Verificar se é seleção por número de resultados múltiplos
@@ -511,32 +546,48 @@ async def duel(ctx, opponent: discord.Member = None):
 
 @bot.command()
 async def hand(ctx):
+    log_write(f"Hand command called by {ctx.author.name} (ID: {ctx.author.id})")
     embed = duel_manager.get_hand_embed(ctx.author.id)
     if embed.title == "❌ **Erro**":
+        log_write(f"Hand command failed - user not in duel: {ctx.author.name}")
         await ctx.send("❌ Você não está em um duelo!")
     else:
-        await ctx.author.send(embed=embed)
+        log_write(f"Hand command success - sending DM to {ctx.author.name}")
+        try:
+            await ctx.author.send(embed=embed)
+            log_write(f"Hand sent successfully to {ctx.author.name}")
+        except discord.Forbidden:
+            log_write(f"Hand command failed - cannot DM {ctx.author.name}")
+            await ctx.send("❌ Não consigo enviar sua mão por DM. Ative mensagens privadas do servidor.")
 
 @bot.command()
 async def summon(ctx, *, card_identifier: str = None):
+    log_write(f"Summon command called by {ctx.author.name} with identifier: '{card_identifier}'")
     if not card_identifier:
+        log_write(f"Summon command failed - no identifier provided by {ctx.author.name}")
         await ctx.send("❌ Especifique o número ou nome da carta entre aspas! Ex: `$summon 1` ou `$summon \"Nome da Carta\"`")
         return
     result = duel_manager.summon_card(ctx, card_identifier)
     if isinstance(result, str):
+        log_write(f"Summon command failed - {result}")
         await ctx.send(result)
     else:
+        log_write(f"Summon command success - card summoned by {ctx.author.name}")
         await ctx.send(embed=result)
 
 @bot.command()
 async def attack(ctx, creature_index: int = None, target: str = None):
-    if target != "player" and target is not None:
+    log_write(f"Attack command called by {ctx.author.name} with index: {creature_index}, target: {target}")
+    if target is not None and target != "player":
+        log_write(f"Attack command failed - invalid target '{target}' by {ctx.author.name}")
         await ctx.send("❌ Use `$attack [número] player` para atacar o oponente diretamente.")
         return
     result = duel_manager.attack_player(ctx, creature_index)
     if isinstance(result, str):
+        log_write(f"Attack command failed - {result}")
         await ctx.send(result)
     else:
+        log_write(f"Attack command success - attack executed by {ctx.author.name}")
         await ctx.send(embed=result)
 
 @bot.command()
@@ -578,10 +629,13 @@ async def duelstatus(ctx):
 
 @bot.command()
 async def endduel(ctx):
+    log_write(f"Endduel command called by {ctx.author.name}")
     result = duel_manager.end_duel(ctx)
     if isinstance(result, str):
+        log_write(f"Endduel command failed - {result}")
         await ctx.send(result)
     else:
+        log_write(f"Endduel command success - duel ended by {ctx.author.name}")
         await ctx.send(embed=result)
 
 
@@ -590,9 +644,6 @@ async def endduel(ctx):
 
 @bot.command()
 async def meme(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     # Lista todos os arquivos da pasta memes
     memes_path = "./memes"
@@ -645,9 +696,6 @@ async def meme(ctx):
 
 @bot.command()
 async def joke(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     jokes = [
         "Por que o computador foi ao médico? Porque tinha vírus! 🦠",
@@ -668,9 +716,6 @@ async def joke(ctx):
 
 @bot.command()
 async def insult(ctx, target: discord.Member = None):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     insults = [
         "é mais burro que uma porta!",
@@ -704,9 +749,6 @@ async def insult(ctx, target: discord.Member = None):
 
 @bot.command()
 async def quote(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     quotes = [
         "\"A vida é como um jogo, mas alguns preferem ficar assistindo.\" - Mestre dos Games",
@@ -727,9 +769,6 @@ async def quote(ctx):
 
 @bot.command()
 async def roll(ctx, sides: int = 6, count: int = 1):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     if sides < 2 or sides > 100:
         await ctx.send("❌ Número de lados deve ser entre 2 e 100!")
@@ -757,10 +796,6 @@ async def roll(ctx, sides: int = 6, count: int = 1):
 
 @bot.command()
 async def flip(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     result = random.choice(["Cara", "Coroa"])
     emoji = "🪙" if result == "Cara" else "👑"
 
@@ -772,6 +807,144 @@ async def flip(ctx):
 
     await ctx.send(embed=embed)
     log_write(f"Cara ou coroa por {ctx.author.name}: {result}")
+
+# Função para seleção de servidores se necessário
+async def select_servers_if_needed():
+    """Verifica se precisa selecionar servidores e faz isso."""
+    # Verificar se já existe seleção
+    try:
+        with open('selected_guilds.txt', 'r') as f:
+            existing_selection = [line.strip() for line in f if line.strip()]
+        if existing_selection:
+            return  # Já tem seleção, continua
+    except FileNotFoundError:
+        pass  # Arquivo não existe, precisa selecionar
+
+    # Criar client temporário para seleção
+    intents = discord.Intents.default()
+    intents.message_content = True
+    intents.reactions = True
+
+    client = discord.Client(intents=intents)
+    selection_done = False
+
+    @client.event
+    async def on_ready():
+        nonlocal selection_done
+        print(f"\n╔{'═'*58}╗")
+        print(f"║🤖  {'SELEÇÃO DE SERVIDORES PARA O BOT':<48} 🤖║")
+        print(f"╠{'═'*58}╣")
+        print(f"║ Conectado como: {str(client.user)[:45]:<45} ║")
+        print(f"╚{'═'*58}╝")
+
+        if not client.guilds:
+            print("\n❌ Nenhum servidor encontrado!")
+            await client.close()
+            return
+
+        print(f"\n📋 Servidores disponíveis ({len(client.guilds)}):\n")
+
+        guild_list = []
+        for i, guild in enumerate(client.guilds, 1):
+            member_count = len(guild.members)
+            print(f"║ {guild.id}. {guild.name:<35} ({member_count:>3} membros) ║")
+            guild_list.append(guild)
+
+        print(f"\n╔{'═'*58}╗")
+        print("║📝  INSTRUÇÕES:"+" "*41+"║")
+        print(f"╠{'═'*58}╣")
+        print("║ • Digite o ID do servidor ou números (ex: 123456789,2) ║")
+        print("║ • Digite 'all' para selecionar todos                     ║")
+        print("║ • Digite 'none' para não selecionar nenhum              ║")
+        print("║ • Deixe vazio para usar apenas o primeiro servidor      ║")
+        print(f"╚{'═'*58}╝")
+
+        # Obter escolha do usuário
+        selected_guilds = await get_user_choice_async(guild_list)
+
+        # Salvar seleção no arquivo
+        try:
+            with open('selected_guilds.txt', 'w') as f:
+                for guild_id in selected_guilds:
+                    f.write(f"{guild_id}\n")
+            print(f"\n💾 Seleção salva em 'selected_guilds.txt' ({len(selected_guilds)} servidores)")
+        except Exception as e:
+            print(f"❌ Erro ao salvar seleção: {e}")
+
+        print(f"\n🎮 Servidores ativos: {len(selected_guilds)}")
+        print("="*60)
+        print("✅ Continuando com o bot...")
+        print("="*60)
+
+        selection_done = True
+        await client.close()
+
+    try:
+        await client.start(TOKEN)
+    except discord.LoginFailure as e:
+        log_write(f"ERROR: Falha no login - Token inválido: {e}")
+        print("ERRO: Token do Discord inválido!")
+        return
+    except Exception as e:
+        log_write(f"ERROR: Falha ao conectar para seleção: {e}")
+        print(f"ERRO: Falha ao conectar para seleção: {e}")
+        return
+
+async def get_user_choice_async(guild_list):
+    """Função assíncrona para obter escolha do usuário."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, get_user_choice_sync, guild_list)
+
+def get_user_choice_sync(guild_list):
+    """Função síncrona para obter escolha do usuário."""
+    while True:
+        try:
+            choice = input("🎯 Escolha os servidores: ").strip().lower()
+
+            if choice == 'all':
+                return {guild.id for guild in guild_list}
+            elif choice == 'none':
+                return set()
+            elif choice == '':
+                return {guild_list[0].id} if guild_list else set()
+            else:
+                selected_guilds = set()
+                # Parse dos IDs ou números
+                for part in choice.split(','):
+                    part = part.strip()
+                    if part.isdigit():
+                        # Primeiro tenta interpretar como ID do servidor
+                        guild_id = int(part)
+                        if any(guild.id == guild_id for guild in guild_list):
+                            selected_guilds.add(guild_id)
+                        # Se não for ID válido, tenta como número sequencial
+                        elif 1 <= guild_id <= len(guild_list):
+                            selected_guilds.add(guild_list[guild_id - 1].id)
+                        else:
+                            print(f"⚠️ '{part}' não é um ID válido nem um número sequencial válido")
+                            selected_guilds = set()
+                            break
+                    else:
+                        print(f"⚠️ '{part}' não é um número válido")
+                        selected_guilds = set()
+                        break
+
+                if selected_guilds:
+                    return selected_guilds
+                else:
+                    print("❌ Entrada inválida. Tente novamente.")
+
+        except KeyboardInterrupt:
+            print("\n❌ Seleção cancelada pelo usuário.")
+            return set()
+        except Exception as e:
+            print(f"❌ Erro: {e}")
+            return set()
+
+# Executar seleção se necessário
+import asyncio
+asyncio.run(select_servers_if_needed())
 
 # Tratamento de erros de login
 try:

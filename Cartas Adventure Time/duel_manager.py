@@ -76,7 +76,7 @@ class DuelManager:
             return discord.Embed(
                 title="❌ **Erro**",
                 description="Você não está em um duelo!",
-                color=int(config['colors']['error'], 16)
+                color=int(config['colors']['error'].lstrip('#'), 16)
             )
 
         hand_cards = self.duel_hand[user_id]
@@ -84,13 +84,13 @@ class DuelManager:
             return discord.Embed(
                 title=f"{config['emojis']['card']} **Sua Mão**",
                 description="Sua mão está vazia!",
-                color=int(config['colors']['primary'], 16)
+                color=int(config['colors']['primary'].lstrip('#'), 16)
             )
 
         embed = discord.Embed(
             title=f"{config['emojis']['card']} **Sua Mão**",
             description=f"Você tem {len(hand_cards)} cartas na mão:",
-            color=int(config['colors']['primary'], 16)
+            color=int(config['colors']['primary'].lstrip('#'), 16)
         )
 
         for i, card_name in enumerate(hand_cards, 1):
@@ -146,7 +146,7 @@ class DuelManager:
         embed = discord.Embed(
             title="🪄 **Carta Invocada!**",
             description=f"{ctx.author.mention} invocou **{card_name}**!",
-            color=int(config['colors']['success'], 16)
+            color=int(config['colors']['success'].lstrip('#'), 16)
         )
         embed.add_field(name="👹 Nome:", value=card_name, inline=True)
         embed.add_field(name="⚔️ ATK:", value=creature['atk'], inline=True)
@@ -264,7 +264,7 @@ class DuelManager:
 
         embed = discord.Embed(
             title="🏟️ **Campo de Batalha**",
-            color=int(config['colors']['info'], 16)
+            color=int(config['colors']['info'].lstrip('#'), 16)
         )
 
         # Suas criaturas
@@ -298,7 +298,7 @@ class DuelManager:
         embed = discord.Embed(
             title="🏁 **Duelo Encerrado**",
             description=f"{ctx.author.mention} encerrou o duelo contra {opponent.mention}.",
-            color=int(config['colors']['warning'], 16)
+            color=int(config['colors']['warning'].lstrip('#'), 16)
         )
 
         self.cleanup_duel(user_id, opponent_id)
@@ -313,7 +313,7 @@ class DuelManager:
 
         embed = discord.Embed(
             title="📊 **Status do Duelo**",
-            color=int(config['colors']['primary'], 16)
+            color=int(config['colors']['primary'].lstrip('#'), 16)
         )
 
         embed.add_field(
