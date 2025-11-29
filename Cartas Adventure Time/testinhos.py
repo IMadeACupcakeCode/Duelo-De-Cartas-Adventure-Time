@@ -355,10 +355,6 @@ def create_card_embed(card_data):
 
 @bot.command()
 async def c(ctx, *, arg):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     user_id = ctx.author.id
 
     # Verificar se é seleção por número de resultados múltiplos
@@ -504,10 +500,6 @@ async def img(ctx, *, arg):
 
 @bot.command()
 async def duel(ctx, opponent: discord.Member = None):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     if opponent is None:
         await ctx.send("❌ Você precisa mencionar um oponente! Use: `$duel @usuário`")
         return
@@ -575,10 +567,6 @@ async def duel(ctx, opponent: discord.Member = None):
 
 @bot.command()
 async def hand(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     user_id = ctx.author.id
     if user_id not in active_duels:
         await ctx.send("❌ Você não está em um duelo! Use `$duel @usuário` para iniciar um.")
@@ -606,10 +594,6 @@ async def hand(ctx):
 
 @bot.command()
 async def summon(ctx, card_index: int = None):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
     user_id = ctx.author.id
     if user_id not in active_duels:
         await ctx.send("❌ Você não está em um duelo!")
