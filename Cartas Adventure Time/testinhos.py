@@ -530,8 +530,11 @@ async def attack(ctx, creature_index: int = None, target: str = None):
     if target != "player" and target is not None:
         await ctx.send("❌ Use `$attack [número] player` para atacar o oponente diretamente.")
         return
-    embed = duel_manager.attack_player(ctx, creature_index)
-    await ctx.send(embed=embed)
+    result = duel_manager.attack_player(ctx, creature_index)
+    if isinstance(result, str):
+        await ctx.send(result)
+    else:
+        await ctx.send(embed=result)
 
 @bot.command()
 async def draw(ctx):
@@ -543,11 +546,11 @@ async def draw(ctx):
 
 @bot.command()
 async def board(ctx):
-    embed = duel_manager.get_board_embed(ctx)
-    if isinstance(embed, str):
-        await ctx.send(embed)
+    result = duel_manager.get_board_embed(ctx)
+    if isinstance(result, str):
+        await ctx.send(result)
     else:
-        await ctx.send(embed=embed)
+        await ctx.send(embed=result)
 
 @bot.command()
 async def rules(ctx):
@@ -564,11 +567,11 @@ async def endturn(ctx):
 
 @bot.command()
 async def duelstatus(ctx):
-    embed = duel_manager.get_status_embed(ctx)
-    if isinstance(embed, str):
-        await ctx.send(embed)
+    result = duel_manager.get_status_embed(ctx)
+    if isinstance(result, str):
+        await ctx.send(result)
     else:
-        await ctx.author.send(embed=embed)
+        await ctx.author.send(embed=result)
 
 @bot.command()
 async def endduel(ctx):
