@@ -1,0 +1,32 @@
+{
+  "bot": {
+    "prefix": "$",
+    "description": "Bot de Cartas Adventure Time",
+    "version": "1.0.0"
+  },
+  "duel": {
+    "starting_hp": 20,
+    "starting_mana": 1,
+    "deck_size": 20,
+    "hand_size": 3,
+    "mana_per_turn": 1
+  },
+  "colors": {
+    "primary": "#fff100",
+    "success": "#2ecc71",
+    "error": "#e74c3c",
+    "warning": "#f39c12",
+    "info": "#3498db"
+  },
+  "emojis": {
+    "hp": "❤️",
+    "mana": "🔵",
+    "attack": "⚔️",
+    "defense": "🛡️",
+    "card": "🃏",
+    "summon": "🪄",
+    "draw": "🃏",
+    "turn": "🔄",
+    "victory": "🏆"
+  }
+}

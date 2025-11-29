@@ -63,17 +63,11 @@ IRRIATION_LIMIT = 3  # Após 3 erros, começa a xingar
 last_activity = {}  # channel_id: timestamp
 inactive_channels = set()  # Para não enviar múltiplas vezes
 
-# Sistema de duelos
-active_duels = {}  # user_id: opponent_id
-duel_turns = {}    # user_id: True/False (sua vez)
-duel_hp = {}       # user_id: hp
-duel_deck = {}     # user_id: list of card names
-duel_hand = {}     # user_id: list of card names
-duel_board = {}    # user_id: list of summoned creatures (dicts with name, atk, def, etc.)
-duel_mana = {}     # user_id: current mana
-duel_max_mana = {} # user_id: max mana
-duel_graveyard = {} # user_id: list of discarded cards
-duel_message_ids = {}  # user_id: message_id do status
+# Importar DuelManager
+from duel_manager import DuelManager, get_rules_embed
+
+# Instanciar DuelManager
+duel_manager = DuelManager(all_cards, get_card_data)
 
 def can_send_in_channel(channel):
     """Verifica se o bot pode enviar mensagens no canal."""
@@ -512,420 +506,74 @@ async def duel(ctx, opponent: discord.Member = None):
         await ctx.send("❌ Você não pode duelar contra bots!")
         return
 
-    user_id = ctx.author.id
-    opponent_id = opponent.id
-
-    # Verificar se já está em duelo
-    if user_id in active_duels or opponent_id in active_duels:
-        await ctx.send("❌ Um dos jogadores já está em um duelo!")
-        return
-
-    # Iniciar duelo
-    active_duels[user_id] = opponent_id
-    active_duels[opponent_id] = user_id
-    duel_turns[user_id] = True  # Jogador que iniciou começa
-    duel_turns[opponent_id] = False
-    duel_hp[user_id] = 20
-    duel_hp[opponent_id] = 20
-    duel_mana[user_id] = 1
-    duel_mana[opponent_id] = 1
-    duel_max_mana[user_id] = 1
-    duel_max_mana[opponent_id] = 1
-
-    # Decks aleatórios simples (usando cartas disponíveis)
-    all_card_names = [card[0] for card in all_cards[:30]]  # Usar primeiras 30 cartas
-    duel_deck[user_id] = random.sample(all_card_names, 20)
-    duel_deck[opponent_id] = random.sample(all_card_names, 20)
-
-    # Mãos iniciais
-    duel_hand[user_id] = random.sample(duel_deck[user_id], 3)
-    duel_hand[opponent_id] = random.sample(duel_deck[opponent_id], 3)
-
-    # Remover cartas da mão do deck
-    for card in duel_hand[user_id]:
-        duel_deck[user_id].remove(card)
-    for card in duel_hand[opponent_id]:
-        duel_deck[opponent_id].remove(card)
-
-    duel_board[user_id] = []
-    duel_board[opponent_id] = []
-    duel_graveyard[user_id] = []
-    duel_graveyard[opponent_id] = []
-
-    embed = discord.Embed(
-        title="⚔️ **DUELO INICIADO!** ⚔️",
-        description=f"{ctx.author.mention} desafiou {opponent.mention} para um duelo!",
-        color=0xff0000
-    )
-    embed.add_field(name=f"{ctx.author.display_name}", value=f"❤️ HP: {duel_hp[user_id]}\n🔵 Mana: {duel_mana[user_id]}/{duel_max_mana[user_id]}", inline=True)
-    embed.add_field(name=f"{opponent.display_name}", value=f"❤️ HP: {duel_hp[opponent_id]}\n🔵 Mana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}", inline=True)
-    embed.add_field(name="🎯 Vez de:", value=f"{ctx.author.mention}", inline=False)
-    embed.set_footer(text="Use $hand para ver suas cartas | $rules para ver as regras")
-
+    embed = duel_manager.start_duel(ctx, opponent)
     await ctx.send(embed=embed)
-    log_write(f"Duelo iniciado: {ctx.author.name} vs {opponent.name}")
 
 @bot.command()
 async def hand(ctx):
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo! Use `$duel @usuário` para iniciar um.")
-        return
-
-    hand_cards = duel_hand[user_id]
-    if not hand_cards:
-        await ctx.author.send("❌ Sua mão está vazia!")
-        return
-
-    embed = discord.Embed(
-        title="🃏 **Sua Mão**",
-        description=f"Você tem {len(hand_cards)} cartas na mão:",
-        color=0xfff100
-    )
-
-    for i, card_name in enumerate(hand_cards, 1):
-        card_data = get_card_data(card_name)
-        cost = card_data[4] if card_data else "?"
-        embed.add_field(name=f"{i}. {card_name}", value=f"Custo: {cost}", inline=True)
-
-    embed.add_field(name="💡 Como usar:", value="$summon [número] para invocar\n$endturn para passar turno", inline=False)
-
+    embed = duel_manager.get_hand_embed(ctx.author.id)
     await ctx.author.send(embed=embed)
 
 @bot.command()
 async def summon(ctx, card_index: int = None):
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    if not duel_turns[user_id]:
-        await ctx.send("❌ Não é sua vez!")
-        return
-
-    if card_index is None or card_index < 1 or card_index > len(duel_hand[user_id]):
-        await ctx.send(f"❌ Número inválido! Use um número entre 1 e {len(duel_hand[user_id])}.")
-        return
-
-    card_name = duel_hand[user_id][card_index - 1]
-
-    card_data = get_card_data(card_name)
-    mana_cost = int(card_data[4]) if card_data else len(card_name) // 3 + 1
-    if duel_mana[user_id] < mana_cost:
-        await ctx.send(f"❌ Você não tem mana suficiente! Precisa de {mana_cost} mana, você tem {duel_mana[user_id]}.")
-        return
-
-    # Invocar carta
-    duel_mana[user_id] -= mana_cost
-    duel_hand[user_id].remove(card_name)
-
-    # Criar criatura simples
-    creature = {
-        'name': card_name,
-        'atk': int(card_data[5]) if card_data else random.randint(1, 5),
-        'def': int(card_data[6]) if card_data else random.randint(1, 5)
-    }
-    duel_board[user_id].append(creature)
-
-    embed = discord.Embed(
-        title="🪄 **Carta Invocada!**",
-        description=f"{ctx.author.mention} invocou **{card_name}**!",
-        color=0xfff100
-    )
-    embed.add_field(name="Nome:", value=card_name, inline=True)
-    embed.add_field(name="ATK:", value=creature['atk'], inline=True)
-    embed.add_field(name="DEF:", value=creature['def'], inline=True)
-    embed.add_field(name="Mana restante:", value=f"{duel_mana[user_id]}/{duel_max_mana[user_id]}", inline=False)
-    if card_data:
-        embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(card_name)))
-
-    await ctx.send(embed=embed)
-    log_write(f"{ctx.author.name} invocou {card_name}")
+    result = duel_manager.summon_card(ctx, card_index)
+    if isinstance(result, str):
+        await ctx.send(result)
+    else:
+        await ctx.send(embed=result)
 
 @bot.command()
 async def attack(ctx, creature_index: int = None, target: str = None):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    if not duel_turns[user_id]:
-        await ctx.send("❌ Não é sua vez!")
-        return
-
-    if not duel_board[user_id]:
-        await ctx.send("❌ Você não tem criaturas no campo!")
-        return
-
-    if creature_index is None or creature_index < 1 or creature_index > len(duel_board[user_id]):
-        await ctx.send(f"❌ Número inválido! Use um número entre 1 e {len(duel_board[user_id])}.")
-        return
-
-    creature = duel_board[user_id][creature_index - 1]
-    opponent_id = active_duels[user_id]
-
-    if target == "player" or target is None:
-        # Atacar jogador diretamente
-        duel_hp[opponent_id] -= creature['atk']
-        embed = discord.Embed(
-            title="⚔️ **Ataque Direto!**",
-            description=f"{ctx.author.mention} atacou {ctx.guild.get_member(opponent_id).mention} diretamente!",
-            color=0xe74c3c
-        )
-        embed.add_field(name="Dano causado:", value=f"❤️ -{creature['atk']} HP", inline=True)
-        embed.add_field(name="HP restante do oponente:", value=f"❤️ {duel_hp[opponent_id]}", inline=True)
-    else:
+    if target != "player" and target is not None:
         await ctx.send("❌ Use `$attack [número] player` para atacar o oponente diretamente.")
         return
-
+    embed = duel_manager.attack_player(ctx, creature_index)
     await ctx.send(embed=embed)
-
-    # Verificar se alguém ganhou
-    if duel_hp[opponent_id] <= 0:
-        winner = ctx.author
-        loser = ctx.guild.get_member(opponent_id)
-
-        embed_win = discord.Embed(
-            title="🏆 **VITÓRIA!** 🏆",
-            description=f"{winner.mention} venceu o duelo contra {loser.mention}!",
-            color=0xf1c40f
-        )
-        await ctx.send(embed=embed_win)
-
-        # Limpar duelo
-        cleanup_duel(user_id, opponent_id)
-        log_write(f"Duelo terminado: {winner.name} venceu")
-    else:
-        log_write(f"{ctx.author.name} atacou diretamente causando {creature['atk']} de dano")
 
 @bot.command()
 async def draw(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    if not duel_turns[user_id]:
-        await ctx.send("❌ Não é sua vez!")
-        return
-
-    if not duel_deck[user_id]:
-        await ctx.send("❌ Seu deck está vazio!")
-        return
-
-    # Comprar uma carta
-    new_card = random.choice(duel_deck[user_id])
-    duel_hand[user_id].append(new_card)
-    duel_deck[user_id].remove(new_card)
-
-    embed = discord.Embed(
-        title="🃏 **Carta Comprada!**",
-        description=f"{ctx.author.mention} comprou uma carta!",
-        color=0xfff100
-    )
-    embed.add_field(name="Carta:", value=new_card, inline=False)
-    embed.add_field(name="Cartas na mão agora:", value=len(duel_hand[user_id]), inline=True)
-
-    await ctx.author.send(embed=embed)
-    log_write(f"{ctx.author.name} comprou {new_card}")
+    result = duel_manager.draw_card(ctx)
+    if isinstance(result, str):
+        await ctx.send(result)
+    else:
+        await ctx.author.send(embed=result)
 
 @bot.command()
 async def board(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    opponent_id = active_duels[user_id]
-
-    embed = discord.Embed(
-        title="🏟️ **Campo de Batalha**",
-        color=0x27ae60
-    )
-
-    # Suas criaturas
-    if duel_board[user_id]:
-        your_creatures = ""
-        for i, creature in enumerate(duel_board[user_id], 1):
-            your_creatures += f"{i}. {creature['name']} (ATK: {creature['atk']}, DEF: {creature['def']})\n"
-        embed.add_field(name=f"🛡️ Criaturas de {ctx.author.display_name}", value=your_creatures, inline=False)
+    embed = duel_manager.get_board_embed(ctx)
+    if isinstance(embed, str):
+        await ctx.send(embed)
     else:
-        embed.add_field(name=f"🛡️ Criaturas de {ctx.author.display_name}", value="Nenhuma criatura no campo", inline=False)
-
-    # Criaturas do oponente
-    if duel_board[opponent_id]:
-        opp_creatures = ""
-        for i, creature in enumerate(duel_board[opponent_id], 1):
-            opp_creatures += f"{i}. {creature['name']} (ATK: {creature['atk']}, DEF: {creature['def']})\n"
-        embed.add_field(name=f"⚔️ Criaturas de {ctx.guild.get_member(opponent_id).display_name}", value=opp_creatures, inline=False)
-    else:
-        embed.add_field(name=f"⚔️ Criaturas de {ctx.guild.get_member(opponent_id).display_name}", value="Nenhuma criatura no campo", inline=False)
-
-    await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
 
 @bot.command()
 async def rules(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    embed = discord.Embed(
-        title="📜 **Regras do Duelo - Guerra De Cartas**",
-        description="Bem-vindo ao sistema de duelos! Aqui estão as regras básicas:",
-        color=0x8e44ad
-    )
-
-    embed.add_field(
-        name="🎯 **Objetivo**",
-        value="Reduza o HP do oponente a 0 para vencer!",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🔵 **Mana**",
-        value="• Comece com 1 mana\n• Ganhe 1 mana máxima por turno\n• Use mana para invocar cartas",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🃏 **Cartas**",
-        value="• Cada jogador começa com 3 cartas\n• Custo de mana baseado no nome da carta\n• Invocação consome mana",
-        inline=False
-    )
-
-    embed.add_field(
-        name="⚔️ **Combate**",
-        value="• `$summon [número]` - Invocar criatura\n• `$attack [número] player` - Atacar oponente\n• `$endturn` - Passar turno",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🎲 **Turnos**",
-        value="• Alternem turnos\n• Oponente ganha mana e compra carta no seu turno\n• Use `$duelstatus` para ver o estado",
-        inline=False
-    )
-
-    embed.set_footer(text="Divirta-se duelando! 🃏⚔️")
-
+    embed = get_rules_embed()
     await ctx.send(embed=embed)
 
 @bot.command()
 async def endturn(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    if not duel_turns[user_id]:
-        await ctx.send("❌ Não é sua vez!")
-        return
-
-    opponent_id = active_duels[user_id]
-
-    # Passar turno
-    duel_turns[user_id] = False
-    duel_turns[opponent_id] = True
-
-    # Aumentar mana máxima do oponente e dar mana cheia
-    duel_max_mana[opponent_id] += 1
-    duel_mana[opponent_id] = duel_max_mana[opponent_id]
-
-    # Oponente compra uma carta
-    if duel_deck[opponent_id]:
-        new_card = random.choice(duel_deck[opponent_id])
-        duel_hand[opponent_id].append(new_card)
-        duel_deck[opponent_id].remove(new_card)
-
-    embed = discord.Embed(
-        title="🔄 **Turno Passado!**",
-        description=f"Agora é a vez de {ctx.guild.get_member(opponent_id).mention}!",
-        color=0x2ecc71
-    )
-    embed.add_field(
-        name=f"Vez de {ctx.guild.get_member(opponent_id).display_name}:",
-        value=f"🔵 Mana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}\n🃏 Cartas na mão: {len(duel_hand[opponent_id])}",
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-    log_write(f"{ctx.author.name} passou o turno para {ctx.guild.get_member(opponent_id).name}")
+    result = duel_manager.end_turn(ctx)
+    if isinstance(result, str):
+        await ctx.send(result)
+    else:
+        await ctx.send(embed=result)
 
 @bot.command()
 async def duelstatus(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    opponent_id = active_duels[user_id]
-
-    embed = discord.Embed(
-        title="📊 **Status do Duelo**",
-        color=0xfff100
-    )
-
-    embed.add_field(
-        name=f"❤️ {ctx.author.display_name}",
-        value=f"HP: {duel_hp[user_id]}\nMana: {duel_mana[user_id]}/{duel_max_mana[user_id]}\nCartas na mão: {len(duel_hand[user_id])}\nCriaturas no campo: {len(duel_board[user_id])}",
-        inline=True
-    )
-
-    embed.add_field(
-        name=f"❤️ {ctx.guild.get_member(opponent_id).display_name}",
-        value=f"HP: {duel_hp[opponent_id]}\nMana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}\nCartas na mão: {len(duel_hand[opponent_id])}\nCriaturas no campo: {len(duel_board[opponent_id])}",
-        inline=True
-    )
-
-    current_player = ctx.author.display_name if duel_turns[user_id] else ctx.guild.get_member(opponent_id).display_name
-    embed.add_field(name="🎯 Vez atual:", value=current_player, inline=False)
-
-    await ctx.author.send(embed=embed)
+    embed = duel_manager.get_status_embed(ctx)
+    if isinstance(embed, str):
+        await ctx.send(embed)
+    else:
+        await ctx.author.send(embed=embed)
 
 @bot.command()
 async def endduel(ctx):
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
-
-    user_id = ctx.author.id
-    if user_id not in active_duels:
-        await ctx.send("❌ Você não está em um duelo!")
-        return
-
-    opponent_id = active_duels[user_id]
-    opponent = ctx.guild.get_member(opponent_id)
-
-    embed = discord.Embed(
-        title="🏁 **Duelo Encerrado**",
-        description=f"{ctx.author.mention} encerrou o duelo contra {opponent.mention}.",
-        color=0x95a5a6
-    )
-
-    await ctx.send(embed=embed)
-
-    # Limpar duelo
-    cleanup_duel(user_id, opponent_id)
-    log_write(f"Duelo encerrado por {ctx.author.name}")
+    result = duel_manager.end_duel(ctx)
+    if isinstance(result, str):
+        await ctx.send(result)
+    else:
+        await ctx.send(embed=result)
 
 def cleanup_duel(user_id, opponent_id):
     """Limpa os dados do duelo."""
