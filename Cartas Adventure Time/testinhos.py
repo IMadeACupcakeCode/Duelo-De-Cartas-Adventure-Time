@@ -8,6 +8,9 @@ import random
 import asyncio
 import signal
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def log_write(text):
     with open("log.log","a") as log:
@@ -17,7 +20,7 @@ def log_write(text):
 
 log_write("Starting BOT!!!")
 
-TOKEN = "MTQ0NDE0OTM5MjMyMjg1OTA3OQ.Ga8t2N.HcSvSMthjkcJtY7IF69OLCvH_kOu4kVXsJJ6zg"
+TOKEN = os.getenv('DISCORD_TOKEN')
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
@@ -187,9 +190,9 @@ async def c(ctx, *, arg):
             returned_card = last_search[user_id][num]
             # Mostrar a carta selecionada
             embed = discord.Embed(color=0xfff100)
-            embed.set_author(name=returned_card[0], icon_url="https://tse3.mm.bing.net/th/id/OIP.UWjdkRvAf4Ez6L-sbeIenAHaFl?w=589&h=444&rs=1&pid=ImgDetMain&o=7&rm=3")
+            embed.set_author(name=returned_card[0], icon_url=os.getenv('BOT_ICON_URL'))
             embed.add_field(name="Baralho / Quantidade", value=returned_card[8].rstrip(), inline=False)
-            embed.set_thumbnail(url="https://yourserver.com/cardwarsimages/{}.jpg".format(urllib.parse.quote(returned_card[0])))
+            embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(returned_card[0])))
 
             if (returned_card[2].rstrip() == "Creature"):
                 embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
@@ -209,7 +212,7 @@ async def c(ctx, *, arg):
                 embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
                 embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
 
-            embed.add_field(name="Relatar um problema: ", value="Mensagem <@!475057239485317150>", inline=True)
+            embed.add_field(name="Relatar um problema: ", value=f"Mensagem <@!{os.getenv('OWNER_ID')}>", inline=True)
             await ctx.send(file=discord.File(f"./images/{returned_card[0]}.jpg"))
             await ctx.send(embed=embed)
             log_write(returned_card[0])
@@ -338,9 +341,9 @@ async def img(ctx, *, arg):
 
             embed = discord.Embed(color=0xfff100)
 
-            embed.set_author(name=returned_card[0], icon_url="https://tse3.mm.bing.net/th/id/OIP.UWjdkRvAf4Ez6L-sbeIenAHaFl?w=589&h=444&rs=1&pid=ImgDetMain&o=7&rm=3")
+            embed.set_author(name=returned_card[0], icon_url=os.getenv('BOT_ICON_URL'))
             embed.add_field(name="Baralho / Quantidade", value=returned_card[8].rstrip(), inline=False)
-            embed.set_thumbnail(url="https://yourserver.com/cardwarsimages/{}.jpg".format(urllib.parse.quote(returned_card[0])))
+            embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(returned_card[0])))
 
             if (returned_card[2].rstrip() == "Creature"):
                 embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
@@ -361,7 +364,7 @@ async def img(ctx, *, arg):
                 embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
                 #embed.add_field(name="Card Set", value=returned_card[9].rstrip(), inline=True)
 
-            embed.add_field(name="Relatar um problema: ", value="Mensagem <@!475057239485317150>", inline=True)
+            embed.add_field(name="Relatar um problema: ", value=f"Mensagem <@!{os.getenv('OWNER_ID')}>", inline=True)
             await ctx.send(embed=embed)
             log_write(returned_card[0])
             log_write("")
