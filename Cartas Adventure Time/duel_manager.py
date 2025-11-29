@@ -72,6 +72,13 @@ class DuelManager:
         return embed
 
     def get_hand_embed(self, user_id):
+        if user_id not in self.active_duels:
+            return discord.Embed(
+                title="❌ **Erro**",
+                description="Você não está em um duelo!",
+                color=int(config['colors']['error'], 16)
+            )
+
         hand_cards = self.duel_hand[user_id]
         if not hand_cards:
             return discord.Embed(
