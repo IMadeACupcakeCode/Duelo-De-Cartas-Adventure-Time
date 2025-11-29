@@ -512,7 +512,10 @@ async def duel(ctx, opponent: discord.Member = None):
 @bot.command()
 async def hand(ctx):
     embed = duel_manager.get_hand_embed(ctx.author.id)
-    await ctx.send(embed=embed)
+    if embed.title == "❌ **Erro**":
+        await ctx.send("❌ Você não está em um duelo!")
+    else:
+        await ctx.author.send(embed=embed)
 
 @bot.command()
 async def summon(ctx, *, card_identifier: str = None):
