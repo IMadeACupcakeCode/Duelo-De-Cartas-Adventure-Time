@@ -46,6 +46,12 @@ with open('./cards.csv', newline='', encoding='utf-8') as csvfile:
         if row:  # Evitar linhas vazias
             all_cards.append(row)
 
+def get_card_data(card_name):
+    for card in all_cards:
+        if card[0] == card_name:
+            return card
+    return None
+
 # Dicionário para armazenar últimos resultados de busca por usuário
 last_search = {}
 
@@ -246,9 +252,6 @@ async def on_command_error(ctx, error):
 @bot.command()
 async def help(ctx):
     """Mostra os comandos disponíveis no servidor."""
-    if not is_welcome_channel(ctx):
-        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
-        return
 
     embed = discord.Embed(
         title="🎮 **Guerra De Cartas - Comandos Disponíveis**",
@@ -295,7 +298,7 @@ async def help(ctx):
         name="💡 **Dicas**",
         value="• Use aspas para busca exata: `$c \"Jake\"`\n"
               "• Limite de 24 resultados por busca\n"
-              "• Todos os comandos funcionam apenas neste canal!",
+              "• Comandos funcionam em qualquer canal!",
         inline=False
     )
 
@@ -583,23 +586,23 @@ async def hand(ctx):
 
     hand_cards = duel_hand[user_id]
     if not hand_cards:
-        await ctx.send("❌ Sua mão está vazia!")
+        await ctx.author.send("❌ Sua mão está vazia!")
         return
 
     embed = discord.Embed(
         title="🃏 **Sua Mão**",
         description=f"Você tem {len(hand_cards)} cartas na mão:",
-        color=0x3498db
+        color=0xfff100
     )
 
-    hand_list = ""
     for i, card_name in enumerate(hand_cards, 1):
-        hand_list += f"{i}. {card_name}\n"
+        card_data = get_card_data(card_name)
+        cost = card_data[4] if card_data else "?"
+        embed.add_field(name=f"{i}. {card_name}", value=f"Custo: {cost}", inline=True)
 
-    embed.add_field(name="Cartas:", value=hand_list, inline=False)
-    embed.add_field(name="💡 Como usar:", value="`$summon [número]` para invocar uma carta\n`$endturn` para passar o turno", inline=False)
+    embed.add_field(name="💡 Como usar:", value="$summon [número] para invocar\n$endturn para passar turno", inline=False)
 
-    await ctx.send(embed=embed)
+    await ctx.author.send(embed=embed)
 
 @bot.command()
 async def summon(ctx, card_index: int = None):
@@ -622,8 +625,8 @@ async def summon(ctx, card_index: int = None):
 
     card_name = duel_hand[user_id][card_index - 1]
 
-    # Verificar custo de mana (simplificado - custo baseado no tamanho do nome)
-    mana_cost = len(card_name) // 3 + 1  # Custo simples baseado no nome
+    card_data = get_card_data(card_name)
+    mana_cost = int(card_data[4]) if card_data else len(card_name) // 3 + 1
     if duel_mana[user_id] < mana_cost:
         await ctx.send(f"❌ Você não tem mana suficiente! Precisa de {mana_cost} mana, você tem {duel_mana[user_id]}.")
         return
@@ -635,20 +638,22 @@ async def summon(ctx, card_index: int = None):
     # Criar criatura simples
     creature = {
         'name': card_name,
-        'atk': random.randint(1, 5),
-        'def': random.randint(1, 5)
+        'atk': int(card_data[5]) if card_data else random.randint(1, 5),
+        'def': int(card_data[6]) if card_data else random.randint(1, 5)
     }
     duel_board[user_id].append(creature)
 
     embed = discord.Embed(
         title="🪄 **Carta Invocada!**",
         description=f"{ctx.author.mention} invocou **{card_name}**!",
-        color=0x9b59b6
+        color=0xfff100
     )
     embed.add_field(name="Nome:", value=card_name, inline=True)
     embed.add_field(name="ATK:", value=creature['atk'], inline=True)
     embed.add_field(name="DEF:", value=creature['def'], inline=True)
     embed.add_field(name="Mana restante:", value=f"{duel_mana[user_id]}/{duel_max_mana[user_id]}", inline=False)
+    if card_data:
+        embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(card_name)))
 
     await ctx.send(embed=embed)
     log_write(f"{ctx.author.name} invocou {card_name}")
@@ -740,12 +745,12 @@ async def draw(ctx):
     embed = discord.Embed(
         title="🃏 **Carta Comprada!**",
         description=f"{ctx.author.mention} comprou uma carta!",
-        color=0x3498db
+        color=0xfff100
     )
     embed.add_field(name="Carta:", value=new_card, inline=False)
     embed.add_field(name="Cartas na mão agora:", value=len(duel_hand[user_id]), inline=True)
 
-    await ctx.send(embed=embed)
+    await ctx.author.send(embed=embed)
     log_write(f"{ctx.author.name} comprou {new_card}")
 
 @bot.command()
@@ -892,7 +897,7 @@ async def duelstatus(ctx):
 
     embed = discord.Embed(
         title="📊 **Status do Duelo**",
-        color=0x95a5a6
+        color=0xfff100
     )
 
     embed.add_field(
@@ -910,7 +915,7 @@ async def duelstatus(ctx):
     current_player = ctx.author.display_name if duel_turns[user_id] else ctx.guild.get_member(opponent_id).display_name
     embed.add_field(name="🎯 Vez atual:", value=current_player, inline=False)
 
-    await ctx.send(embed=embed)
+    await ctx.author.send(embed=embed)
 
 @bot.command()
 async def endduel(ctx):
