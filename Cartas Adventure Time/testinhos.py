@@ -515,8 +515,11 @@ async def hand(ctx):
     await ctx.author.send(embed=embed)
 
 @bot.command()
-async def summon(ctx, card_index: int = None):
-    result = duel_manager.summon_card(ctx, card_index)
+async def summon(ctx, *, card_identifier: str = None):
+    if not card_identifier:
+        await ctx.send("❌ Especifique o número ou nome da carta entre aspas! Ex: `$summon 1` ou `$summon \"Nome da Carta\"`")
+        return
+    result = duel_manager.summon_card(ctx, card_identifier)
     if isinstance(result, str):
         await ctx.send(result)
     else:
