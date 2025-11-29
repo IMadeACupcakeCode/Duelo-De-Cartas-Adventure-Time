@@ -75,27 +75,31 @@ class DuelManager:
         hand_cards = self.duel_hand[user_id]
         if not hand_cards:
             return discord.Embed(
-                title="🃏 **Sua Mão**",
+                title=f"{config['emojis']['card']} **Sua Mão**",
                 description="Sua mão está vazia!",
-                color=0xfff100
+                color=int(config['colors']['primary'], 16)
             )
 
         embed = discord.Embed(
-            title="🃏 **Sua Mão**",
+            title=f"{config['emojis']['card']} **Sua Mão**",
             description=f"Você tem {len(hand_cards)} cartas na mão:",
-            color=0xfff100
+            color=int(config['colors']['primary'], 16)
         )
 
         for i, card_name in enumerate(hand_cards, 1):
             card_data = self.get_card_data(card_name)
             cost = card_data[4] if card_data else "?"
-            embed.add_field(name=f"{i}. {card_name}", value=f"💎 Custo: {cost}", inline=True)
+            type_str = card_data[2] if card_data else "?"
+            atk_def = f"⚔️ {card_data[5]} 🛡️ {card_data[6]}" if card_data and card_data[2] == "Creature" else ""
+            desc_short = card_data[1][:50] + "..." if card_data and len(card_data[1]) > 50 else card_data[1] if card_data else ""
+            value = f"{config['emojis']['mana']} {cost} | {type_str}\n{atk_def}\n{desc_short}"
+            embed.add_field(name=f"{i}. {card_name}", value=value, inline=False)
 
-        embed.add_field(name="💡 Como usar:", value="$summon [número] para invocar\n$attack [número] player para atacar\n$draw para comprar\n$endturn para passar", inline=False)
+        embed.add_field(name="💡 Como usar:", value="$summon [número ou \"nome\"] para invocar\n$attack [número] player para atacar\n$draw para comprar\n$endturn para passar", inline=False)
 
         return embed
 
-    def summon_card(self, ctx, card_index):
+    def summon_card(self, ctx, card_identifier):
         user_id = ctx.author.id
         if user_id not in self.active_duels:
             return "❌ Você não está em um duelo!"
@@ -103,10 +107,18 @@ class DuelManager:
         if not self.duel_turns[user_id]:
             return "❌ Não é sua vez!"
 
-        if card_index < 1 or card_index > len(self.duel_hand[user_id]):
-            return f"❌ Número inválido! Use um número entre 1 e {len(self.duel_hand[user_id])}."
+        # Parse card_identifier
+        if card_identifier.isdigit():
+            card_index = int(card_identifier) - 1
+            if card_index < 0 or card_index >= len(self.duel_hand[user_id]):
+                return f"❌ Número inválido! Use um número entre 1 e {len(self.duel_hand[user_id])}."
+            card_name = self.duel_hand[user_id][card_index]
+        else:
+            card_name_clean = card_identifier.strip('"')
+            if card_name_clean not in self.duel_hand[user_id]:
+                return "❌ Carta não encontrada na mão!"
+            card_name = card_name_clean
 
-        card_name = self.duel_hand[user_id][card_index - 1]
         card_data = self.get_card_data(card_name)
         mana_cost = int(card_data[4]) if card_data else len(card_name) // 3 + 1
 
@@ -127,14 +139,16 @@ class DuelManager:
         embed = discord.Embed(
             title="🪄 **Carta Invocada!**",
             description=f"{ctx.author.mention} invocou **{card_name}**!",
-            color=0xfff100
+            color=int(config['colors']['success'], 16)
         )
         embed.add_field(name="👹 Nome:", value=card_name, inline=True)
         embed.add_field(name="⚔️ ATK:", value=creature['atk'], inline=True)
         embed.add_field(name="🛡️ DEF:", value=creature['def'], inline=True)
-        embed.add_field(name="🔵 Mana restante:", value=f"{self.duel_mana[user_id]}/{self.duel_max_mana[user_id]}", inline=False)
+        embed.add_field(name=f"{config['emojis']['mana']} Mana restante:", value=f"{self.duel_mana[user_id]}/{self.duel_max_mana[user_id]}", inline=False)
         if card_data:
             embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(card_name)))
+            if card_data[1]:
+                embed.add_field(name="📖 Descrição:", value=card_data[1][:100] + "..." if len(card_data[1]) > 100 else card_data[1], inline=False)
 
         return embed
 
