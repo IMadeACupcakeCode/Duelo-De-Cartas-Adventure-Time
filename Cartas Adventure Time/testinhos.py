@@ -303,49 +303,124 @@ async def help(ctx):
 
     await ctx.send(embed=embed)
 
+def search_cards(query, user_id):
+    """Função auxiliar para buscar cartas no CSV."""
+    with open('./cards.csv', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+
+        search = []
+        if query.startswith('"') and query.endswith('"'):
+            query_clean = query.replace('"', "").lower()
+            for row in reader:
+                if query_clean == row[0].lower():
+                    search.append(row)
+        else:
+            for row in reader:
+                if query.lower() in row[0].lower():
+                    search.append(row)
+
+        return search
+
+def create_card_embed(card_data):
+    """Função auxiliar para criar embed de carta."""
+    embed = discord.Embed(color=0xfff100)
+    embed.set_author(name=card_data[0], icon_url=os.getenv('BOT_ICON_URL'))
+    embed.add_field(name="Baralho / Quantidade", value=card_data[8].rstrip(), inline=False)
+    embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(card_data[0])))
+
+    card_type = card_data[2].rstrip()
+    if card_type == "Creature":
+        embed.add_field(name="Paisagem", value=card_data[3].rstrip(), inline=True)
+        embed.add_field(name="Tipo", value=card_type, inline=True)
+        embed.add_field(name="Custo", value=card_data[4].rstrip(), inline=True)
+        embed.add_field(name="ATA", value=card_data[5].rstrip(), inline=True)
+        embed.add_field(name="DEF", value=card_data[6].rstrip(), inline=True)
+        embed.add_field(name="Descrição", value=card_data[1].rstrip(), inline=True)
+
+    elif card_type in ["Spell", "Building", "Teamwork"]:
+        embed.add_field(name="Paisagem", value=card_data[3].rstrip(), inline=True)
+        embed.add_field(name="Tipo", value=card_type, inline=True)
+        embed.add_field(name="Custo", value=card_data[4].rstrip(), inline=True)
+        embed.add_field(name="Descrição", value=card_data[1].rstrip(), inline=True)
+
+    elif card_type == "Hero":
+        embed.add_field(name="Tipo", value=card_type, inline=True)
+        embed.add_field(name="Descrição", value=card_data[1].rstrip(), inline=True)
+
+    embed.add_field(name="Relatar um problema:", value=f"Mensagem <@!{os.getenv('OWNER_ID')}>", inline=True)
+    return embed
+
 @bot.command()
 async def c(ctx, *, arg):
     if not is_welcome_channel(ctx):
         await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
         return
 
-    embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
-    # Verificar se é seleção por número
+    # Verificar se é seleção por número de resultados múltiplos
     if arg.isdigit() and user_id in last_search:
         num = int(arg) - 1
         if 0 <= num < len(last_search[user_id]):
-            returned_card = last_search[user_id][num]
-            # Mostrar a carta selecionada
-            embed = discord.Embed(color=0xfff100)
-            embed.set_author(name=returned_card[0], icon_url=os.getenv('BOT_ICON_URL'))
-            embed.add_field(name="Baralho / Quantidade", value=returned_card[8].rstrip(), inline=False)
-            embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(returned_card[0])))
-
-            if (returned_card[2].rstrip() == "Creature"):
-                embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Custo", value=returned_card[4].rstrip(), inline=True)
-                embed.add_field(name="ATA", value=returned_card[5].rstrip(), inline=True)
-                embed.add_field(name="DEF", value=returned_card[6].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
-
-            if (returned_card[2].rstrip() == "Spell" or returned_card[2].rstrip() == "Building" or returned_card[2].rstrip() == "Teamwork"):
-                embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Custo", value=returned_card[4].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
-
-            if (returned_card[2].rstrip() == "Hero"):
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
-
-            embed.add_field(name="Relatar um problema: ", value=f"Mensagem <@!{os.getenv('OWNER_ID')}>", inline=True)
-            await ctx.send(file=discord.File(f"./images/{returned_card[0]}.jpg"))
+            card_data = last_search[user_id][num]
+            embed = create_card_embed(card_data)
+            await ctx.send(file=discord.File(f"./images/{card_data[0]}.jpg"))
             await ctx.send(embed=embed)
-            log_write(returned_card[0])
-            log_write("")
+            log_write(f"Carta {card_data[0]} mostrada (seleção por número)")
+        else:
+            await ctx.send(f"Número inválido. Use um número entre 1 e {len(last_search[user_id])}.")
+        return
+
+    # Buscar carta por nome
+    search_results = search_cards(arg, user_id)
+
+    if len(search_results) == 0:
+        embed = discord.Embed(
+            title="🔍 **Nenhum resultado encontrado**",
+            description=f"Não encontrei nenhuma carta com o nome '{arg}'. Tente novamente!",
+            color=0xe74c3c
+        )
+        await ctx.send(embed=embed)
+        log_write(f"Busca por '{arg}' - Nenhum resultado")
+
+    elif len(search_results) > 24:
+        embed = discord.Embed(
+            title="⚠️ **Muitos resultados**",
+            description=f"Sua busca retornou {len(search_results)} cartas. Seja mais específico!",
+            color=0xf39c12
+        )
+        await ctx.send(embed=embed)
+        log_write(f"Busca por '{arg}' - Muitos resultados ({len(search_results)})")
+
+    elif len(search_results) > 1:
+        embed = discord.Embed(
+            title="📋 **Múltiplos Resultados**",
+            description="Encontrei várias cartas. Selecione uma:",
+            color=0x3498db
+        )
+
+        result_list = ""
+        for i, card in enumerate(search_results[:10], 1):  # Mostrar apenas os primeiros 10
+            result_list += f"{i}. {card[0]}\n"
+        if len(search_results) > 10:
+            result_list += f"... e mais {len(search_results) - 10} cartas"
+
+        embed.add_field(name="Cartas encontradas:", value=result_list, inline=False)
+        embed.add_field(
+            name="Como escolher:",
+            value='Use `$c [número]` para ver detalhes ou `$img [número]` para ver apenas a imagem',
+            inline=False
+        )
+        await ctx.send(embed=embed)
+        last_search[user_id] = search_results
+        log_write(f"Busca por '{arg}' - {len(search_results)} resultados")
+
+    else:  # len(search_results) == 1
+        card_data = search_results[0]
+        embed = create_card_embed(card_data)
+        await ctx.send(file=discord.File(f"./images/{card_data[0]}.jpg"))
+        await ctx.send(embed=embed)
+        log_write(f"Carta {card_data[0]} mostrada")
 
 @bot.command()
 async def img(ctx, *, arg):
@@ -353,151 +428,694 @@ async def img(ctx, *, arg):
         await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
         return
 
-    embed = discord.Embed(color=0xfff100)
     user_id = ctx.author.id
 
-    # Verificar se é seleção por número
+    # Verificar se é seleção por número de resultados múltiplos
     if arg.isdigit() and user_id in last_search:
         num = int(arg) - 1
         if 0 <= num < len(last_search[user_id]):
-            returned_card = last_search[user_id][num]
-            await ctx.send(file=discord.File("./images/{}.jpg".format(returned_card[0])))
-            log_write("Imagem de {} enviada".format(returned_card[0]))
-            return
+            card_data = last_search[user_id][num]
+            await ctx.send(file=discord.File(f"./images/{card_data[0]}.jpg"))
+            log_write(f"Imagem de {card_data[0]} enviada (seleção por número)")
         else:
-            await ctx.send("Número inválido. Use um número entre 1 e {}.".format(len(last_search[user_id])))
-            return
+            await ctx.send(f"Número inválido. Use um número entre 1 e {len(last_search[user_id])}.")
+        return
 
-    with open('./cards.csv') as cfile:
-        csv_file = csv.reader(cfile, delimiter=',',quotechar='"')
-        # Find card and return value
-        log_write("{1} \timg {0}".format(arg,ctx.message.author))
+    # Buscar carta por nome
+    search_results = search_cards(arg, user_id)
 
-        search=[]
-        if (arg.startswith('"') and arg.endswith('"')):
-            arg_clean = arg.replace('"',"").lower()
-            for row in csv_file:
-                if arg_clean == row[0].lower():
-                    search.append(row)
-        else:
-            for row in csv_file:
-                if arg.lower() in row[0].lower():
-                    search.append(row)
+    if len(search_results) == 0:
+        embed = discord.Embed(
+            title="🔍 **Nenhuma imagem encontrada**",
+            description=f"Não encontrei nenhuma carta com o nome '{arg}'. Tente novamente!",
+            color=0xe74c3c
+        )
+        await ctx.send(embed=embed)
+        log_write(f"Busca de imagem por '{arg}' - Nenhum resultado")
 
-        if len(search) != 1:
-            if len(search) == 0:
-                embed.set_author(name="Nenhum resultado encontrado, tente novamente.".format(str(len(search))))
-                await ctx.send(embed=embed)
-                log_write("Call for {} cards.".format(str(len(search))))
-                return
+    elif len(search_results) > 24:
+        embed = discord.Embed(
+            title="⚠️ **Muitas imagens**",
+            description=f"Sua busca retornou {len(search_results)} cartas. Seja mais específico!",
+            color=0xf39c12
+        )
+        await ctx.send(embed=embed)
+        log_write(f"Busca de imagem por '{arg}' - Muitos resultados ({len(search_results)})")
 
-            if len(search) > 24:
-                embed.set_author(name="Essa busca excede o limite ({} cartas retornadas). Seja mais específico.".format(str(len(search))))
-                await ctx.send(embed=embed)
-                log_write("Call for {} cards.".format(str(len(search))))
-                return
+    elif len(search_results) > 1:
+        embed = discord.Embed(
+            title="📋 **Múltiplas Imagens**",
+            description="Encontrei várias cartas. Selecione uma:",
+            color=0x3498db
+        )
 
-            if len(search) > 1:
-                embed.set_author(name="Múltiplos Resultados:")
+        result_list = ""
+        for i, card in enumerate(search_results[:10], 1):  # Mostrar apenas os primeiros 10
+            result_list += f"{i}. {card[0]}\n"
+        if len(search_results) > 10:
+            result_list += f"... e mais {len(search_results) - 10} cartas"
 
-                x=1
-                for ting in search:
-                    embed.add_field(name=str(x)+".", value=ting[0], inline=False)
-                    x+=1
+        embed.add_field(name="Cartas encontradas:", value=result_list, inline=False)
+        embed.add_field(
+            name="Como escolher:",
+            value='Use `$c [número]` para ver detalhes ou `$img [número]` para ver apenas a imagem',
+            inline=False
+        )
+        await ctx.send(embed=embed)
+        last_search[user_id] = search_results
+        log_write(f"Busca de imagem por '{arg}' - {len(search_results)} resultados")
 
-                embed.add_field(name="Dica Quente", value='Use `$img [número]` para selecionar uma carta. Ou insira aspas para busca mais específica, ex "Jake"', inline=False)
-                await ctx.send(embed=embed)
-                last_search[user_id] = search  # Salvar para seleção posterior
-                log_write("Mulitple ({}) Results found".format(str(len(search))))
+    else:  # len(search_results) == 1
+        card_data = search_results[0]
+        await ctx.send(file=discord.File(f"./images/{card_data[0]}.jpg"))
+        # Descrição opcional
+        desc_embed = discord.Embed(
+            title=f"📖 Descrição de {card_data[0]}",
+            description=card_data[1].rstrip() if card_data[1] else "Sem descrição.",
+            color=0xfff100
+        )
+        await ctx.send(embed=desc_embed)
+        log_write(f"Imagem de {card_data[0]} enviada")
 
-        if len(search) == 1:
-            returned_card=search[0]
+# ========== COMANDOS DE DUELO ==========
 
-            await ctx.send(file=discord.File("./images/{}.jpg".format(returned_card[0])))
-            # Enviar descrição em português
-            embed = discord.Embed(title=f"📖 Descrição de {returned_card[0]}", description=returned_card[1].rstrip() if returned_card[1] else "Sem descrição.", color=0xfff100)
-            await ctx.send(embed=embed)
-            print(','.join(str(v) for v in search))
-            log_write("")
-            return
-        else:
-            await ctx.send("Número inválido. Use um número entre 1 e {}.".format(len(last_search[user_id])))
-            return
+@bot.command()
+async def duel(ctx, opponent: discord.Member = None):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
 
-    with open('./cards.csv') as cfile:
-        csv_file = csv.reader(cfile, delimiter=',',quotechar='"')
-        # Find card and return value
-        log_write("{1} \t$c {0}".format(arg,ctx.message.author))
+    if opponent is None:
+        await ctx.send("❌ Você precisa mencionar um oponente! Use: `$duel @usuário`")
+        return
 
-        search=[]
-        if (arg.startswith('"') and arg.endswith('"')):
-            arg_clean = arg.replace('"',"").lower()
-            for row in csv_file:
-                if arg_clean == row[0].lower():
-                    search.append(row)
-        else:
-            for row in csv_file:
-                if arg.lower() in row[0].lower():
-                    search.append(row)
+    if opponent == ctx.author:
+        await ctx.send("❌ Você não pode duelar contra si mesmo!")
+        return
 
-        if len(search) != 1:
-            if len(search) == 0:
-                embed.set_author(name="Nenhum resultado encontrado, tente novamente.".format(str(len(search))))
-                await ctx.send(embed=embed)
-                log_write("Call for {} cards.".format(str(len(search))))
-                return
+    if opponent.bot:
+        await ctx.send("❌ Você não pode duelar contra bots!")
+        return
 
-            if len(search) > 24:
-                embed.set_author(name="Essa busca excede o limite ({} cartas retornadas). Seja mais específico.".format(str(len(search))))
-                await ctx.send(embed=embed)
-                log_write("Call for {} cards.".format(str(len(search))))
-                return
+    user_id = ctx.author.id
+    opponent_id = opponent.id
 
-            if len(search) > 1:
-                embed.set_author(name="Múltiplos Resultados:")
+    # Verificar se já está em duelo
+    if user_id in active_duels or opponent_id in active_duels:
+        await ctx.send("❌ Um dos jogadores já está em um duelo!")
+        return
 
-                x=1
-                for ting in search:
-                    embed.add_field(name=str(x)+".", value=ting[0], inline=False)
-                    x+=1
+    # Iniciar duelo
+    active_duels[user_id] = opponent_id
+    active_duels[opponent_id] = user_id
+    duel_turns[user_id] = True  # Jogador que iniciou começa
+    duel_turns[opponent_id] = False
+    duel_hp[user_id] = 20
+    duel_hp[opponent_id] = 20
+    duel_mana[user_id] = 1
+    duel_mana[opponent_id] = 1
+    duel_max_mana[user_id] = 1
+    duel_max_mana[opponent_id] = 1
 
-                embed.add_field(name="Dica Quente", value='Use `$c [número]` para selecionar uma carta. Ou insira aspas para busca mais específica, ex "Jake"', inline=False)
-                await ctx.send(embed=embed)
-                last_search[user_id] = search  # Salvar para seleção posterior
-                log_write("Mulitple ({}) Results found".format(str(len(search))))
+    # Decks aleatórios simples (usando cartas disponíveis)
+    all_card_names = [card[0] for card in all_cards[:30]]  # Usar primeiras 30 cartas
+    duel_deck[user_id] = random.sample(all_card_names, 20)
+    duel_deck[opponent_id] = random.sample(all_card_names, 20)
 
-        if len(search) == 1:
-            returned_card=search[0]
+    # Mãos iniciais
+    duel_hand[user_id] = random.sample(duel_deck[user_id], 3)
+    duel_hand[opponent_id] = random.sample(duel_deck[opponent_id], 3)
 
-            embed = discord.Embed(color=0xfff100)
+    # Remover cartas da mão do deck
+    for card in duel_hand[user_id]:
+        duel_deck[user_id].remove(card)
+    for card in duel_hand[opponent_id]:
+        duel_deck[opponent_id].remove(card)
 
-            embed.set_author(name=returned_card[0], icon_url=os.getenv('BOT_ICON_URL'))
-            embed.add_field(name="Baralho / Quantidade", value=returned_card[8].rstrip(), inline=False)
-            embed.set_thumbnail(url=os.getenv('CARD_IMAGES_URL').format(urllib.parse.quote(returned_card[0])))
+    duel_board[user_id] = []
+    duel_board[opponent_id] = []
+    duel_graveyard[user_id] = []
+    duel_graveyard[opponent_id] = []
 
-            if (returned_card[2].rstrip() == "Creature"):
-                embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Custo", value=returned_card[4].rstrip(), inline=True)
-                embed.add_field(name="ATA", value=returned_card[5].rstrip(), inline=True)
-                embed.add_field(name="DEF", value=returned_card[6].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
+    embed = discord.Embed(
+        title="⚔️ **DUELO INICIADO!** ⚔️",
+        description=f"{ctx.author.mention} desafiou {opponent.mention} para um duelo!",
+        color=0xff0000
+    )
+    embed.add_field(name=f"{ctx.author.display_name}", value=f"❤️ HP: {duel_hp[user_id]}\n🔵 Mana: {duel_mana[user_id]}/{duel_max_mana[user_id]}", inline=True)
+    embed.add_field(name=f"{opponent.display_name}", value=f"❤️ HP: {duel_hp[opponent_id]}\n🔵 Mana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}", inline=True)
+    embed.add_field(name="🎯 Vez de:", value=f"{ctx.author.mention}", inline=False)
+    embed.set_footer(text="Use $hand para ver suas cartas | $rules para ver as regras")
 
-            if (returned_card[2].rstrip() == "Spell" or returned_card[2].rstrip() == "Building" or returned_card[2].rstrip() == "Teamwork"):
-                embed.add_field(name="Paisagem", value=returned_card[3].rstrip(), inline=True)
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Custo", value=returned_card[4].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
+    await ctx.send(embed=embed)
+    log_write(f"Duelo iniciado: {ctx.author.name} vs {opponent.name}")
 
-            if (returned_card[2].rstrip() == "Hero"):
-                embed.add_field(name="Tipo", value=returned_card[2].rstrip(), inline=True)
-                embed.add_field(name="Descrição", value=returned_card[1].rstrip(), inline=True)
-                #embed.add_field(name="Card Set", value=returned_card[9].rstrip(), inline=True)
+@bot.command()
+async def hand(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
 
-            embed.add_field(name="Relatar um problema: ", value=f"Mensagem <@!{os.getenv('OWNER_ID')}>", inline=True)
-            await ctx.send(embed=embed)
-            log_write(returned_card[0])
-            log_write("")
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo! Use `$duel @usuário` para iniciar um.")
+        return
+
+    hand_cards = duel_hand[user_id]
+    if not hand_cards:
+        await ctx.send("❌ Sua mão está vazia!")
+        return
+
+    embed = discord.Embed(
+        title="🃏 **Sua Mão**",
+        description=f"Você tem {len(hand_cards)} cartas na mão:",
+        color=0x3498db
+    )
+
+    hand_list = ""
+    for i, card_name in enumerate(hand_cards, 1):
+        hand_list += f"{i}. {card_name}\n"
+
+    embed.add_field(name="Cartas:", value=hand_list, inline=False)
+    embed.add_field(name="💡 Como usar:", value="`$summon [número]` para invocar uma carta\n`$endturn` para passar o turno", inline=False)
+
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def summon(ctx, card_index: int = None):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    if not duel_turns[user_id]:
+        await ctx.send("❌ Não é sua vez!")
+        return
+
+    if card_index is None or card_index < 1 or card_index > len(duel_hand[user_id]):
+        await ctx.send(f"❌ Número inválido! Use um número entre 1 e {len(duel_hand[user_id])}.")
+        return
+
+    card_name = duel_hand[user_id][card_index - 1]
+
+    # Verificar custo de mana (simplificado - custo baseado no tamanho do nome)
+    mana_cost = len(card_name) // 3 + 1  # Custo simples baseado no nome
+    if duel_mana[user_id] < mana_cost:
+        await ctx.send(f"❌ Você não tem mana suficiente! Precisa de {mana_cost} mana, você tem {duel_mana[user_id]}.")
+        return
+
+    # Invocar carta
+    duel_mana[user_id] -= mana_cost
+    duel_hand[user_id].remove(card_name)
+
+    # Criar criatura simples
+    creature = {
+        'name': card_name,
+        'atk': random.randint(1, 5),
+        'def': random.randint(1, 5)
+    }
+    duel_board[user_id].append(creature)
+
+    embed = discord.Embed(
+        title="🪄 **Carta Invocada!**",
+        description=f"{ctx.author.mention} invocou **{card_name}**!",
+        color=0x9b59b6
+    )
+    embed.add_field(name="Nome:", value=card_name, inline=True)
+    embed.add_field(name="ATK:", value=creature['atk'], inline=True)
+    embed.add_field(name="DEF:", value=creature['def'], inline=True)
+    embed.add_field(name="Mana restante:", value=f"{duel_mana[user_id]}/{duel_max_mana[user_id]}", inline=False)
+
+    await ctx.send(embed=embed)
+    log_write(f"{ctx.author.name} invocou {card_name}")
+
+@bot.command()
+async def attack(ctx, creature_index: int = None, target: str = None):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    if not duel_turns[user_id]:
+        await ctx.send("❌ Não é sua vez!")
+        return
+
+    if not duel_board[user_id]:
+        await ctx.send("❌ Você não tem criaturas no campo!")
+        return
+
+    if creature_index is None or creature_index < 1 or creature_index > len(duel_board[user_id]):
+        await ctx.send(f"❌ Número inválido! Use um número entre 1 e {len(duel_board[user_id])}.")
+        return
+
+    creature = duel_board[user_id][creature_index - 1]
+    opponent_id = active_duels[user_id]
+
+    if target == "player" or target is None:
+        # Atacar jogador diretamente
+        duel_hp[opponent_id] -= creature['atk']
+        embed = discord.Embed(
+            title="⚔️ **Ataque Direto!**",
+            description=f"{ctx.author.mention} atacou {ctx.guild.get_member(opponent_id).mention} diretamente!",
+            color=0xe74c3c
+        )
+        embed.add_field(name="Dano causado:", value=f"❤️ -{creature['atk']} HP", inline=True)
+        embed.add_field(name="HP restante do oponente:", value=f"❤️ {duel_hp[opponent_id]}", inline=True)
+    else:
+        await ctx.send("❌ Use `$attack [número] player` para atacar o oponente diretamente.")
+        return
+
+    await ctx.send(embed=embed)
+
+    # Verificar se alguém ganhou
+    if duel_hp[opponent_id] <= 0:
+        winner = ctx.author
+        loser = ctx.guild.get_member(opponent_id)
+
+        embed_win = discord.Embed(
+            title="🏆 **VITÓRIA!** 🏆",
+            description=f"{winner.mention} venceu o duelo contra {loser.mention}!",
+            color=0xf1c40f
+        )
+        await ctx.send(embed=embed_win)
+
+        # Limpar duelo
+        cleanup_duel(user_id, opponent_id)
+        log_write(f"Duelo terminado: {winner.name} venceu")
+    else:
+        log_write(f"{ctx.author.name} atacou diretamente causando {creature['atk']} de dano")
+
+@bot.command()
+async def draw(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    if not duel_turns[user_id]:
+        await ctx.send("❌ Não é sua vez!")
+        return
+
+    if not duel_deck[user_id]:
+        await ctx.send("❌ Seu deck está vazio!")
+        return
+
+    # Comprar uma carta
+    new_card = random.choice(duel_deck[user_id])
+    duel_hand[user_id].append(new_card)
+    duel_deck[user_id].remove(new_card)
+
+    embed = discord.Embed(
+        title="🃏 **Carta Comprada!**",
+        description=f"{ctx.author.mention} comprou uma carta!",
+        color=0x3498db
+    )
+    embed.add_field(name="Carta:", value=new_card, inline=False)
+    embed.add_field(name="Cartas na mão agora:", value=len(duel_hand[user_id]), inline=True)
+
+    await ctx.send(embed=embed)
+    log_write(f"{ctx.author.name} comprou {new_card}")
+
+@bot.command()
+async def board(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    opponent_id = active_duels[user_id]
+
+    embed = discord.Embed(
+        title="🏟️ **Campo de Batalha**",
+        color=0x27ae60
+    )
+
+    # Suas criaturas
+    if duel_board[user_id]:
+        your_creatures = ""
+        for i, creature in enumerate(duel_board[user_id], 1):
+            your_creatures += f"{i}. {creature['name']} (ATK: {creature['atk']}, DEF: {creature['def']})\n"
+        embed.add_field(name=f"🛡️ Criaturas de {ctx.author.display_name}", value=your_creatures, inline=False)
+    else:
+        embed.add_field(name=f"🛡️ Criaturas de {ctx.author.display_name}", value="Nenhuma criatura no campo", inline=False)
+
+    # Criaturas do oponente
+    if duel_board[opponent_id]:
+        opp_creatures = ""
+        for i, creature in enumerate(duel_board[opponent_id], 1):
+            opp_creatures += f"{i}. {creature['name']} (ATK: {creature['atk']}, DEF: {creature['def']})\n"
+        embed.add_field(name=f"⚔️ Criaturas de {ctx.guild.get_member(opponent_id).display_name}", value=opp_creatures, inline=False)
+    else:
+        embed.add_field(name=f"⚔️ Criaturas de {ctx.guild.get_member(opponent_id).display_name}", value="Nenhuma criatura no campo", inline=False)
+
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def rules(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    embed = discord.Embed(
+        title="📜 **Regras do Duelo - Guerra De Cartas**",
+        description="Bem-vindo ao sistema de duelos! Aqui estão as regras básicas:",
+        color=0x8e44ad
+    )
+
+    embed.add_field(
+        name="🎯 **Objetivo**",
+        value="Reduza o HP do oponente a 0 para vencer!",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔵 **Mana**",
+        value="• Comece com 1 mana\n• Ganhe 1 mana máxima por turno\n• Use mana para invocar cartas",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🃏 **Cartas**",
+        value="• Cada jogador começa com 3 cartas\n• Custo de mana baseado no nome da carta\n• Invocação consome mana",
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚔️ **Combate**",
+        value="• `$summon [número]` - Invocar criatura\n• `$attack [número] player` - Atacar oponente\n• `$endturn` - Passar turno",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎲 **Turnos**",
+        value="• Alternem turnos\n• Oponente ganha mana e compra carta no seu turno\n• Use `$duelstatus` para ver o estado",
+        inline=False
+    )
+
+    embed.set_footer(text="Divirta-se duelando! 🃏⚔️")
+
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def endturn(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    if not duel_turns[user_id]:
+        await ctx.send("❌ Não é sua vez!")
+        return
+
+    opponent_id = active_duels[user_id]
+
+    # Passar turno
+    duel_turns[user_id] = False
+    duel_turns[opponent_id] = True
+
+    # Aumentar mana máxima do oponente e dar mana cheia
+    duel_max_mana[opponent_id] += 1
+    duel_mana[opponent_id] = duel_max_mana[opponent_id]
+
+    # Oponente compra uma carta
+    if duel_deck[opponent_id]:
+        new_card = random.choice(duel_deck[opponent_id])
+        duel_hand[opponent_id].append(new_card)
+        duel_deck[opponent_id].remove(new_card)
+
+    embed = discord.Embed(
+        title="🔄 **Turno Passado!**",
+        description=f"Agora é a vez de {ctx.guild.get_member(opponent_id).mention}!",
+        color=0x2ecc71
+    )
+    embed.add_field(
+        name=f"Vez de {ctx.guild.get_member(opponent_id).display_name}:",
+        value=f"🔵 Mana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}\n🃏 Cartas na mão: {len(duel_hand[opponent_id])}",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+    log_write(f"{ctx.author.name} passou o turno para {ctx.guild.get_member(opponent_id).name}")
+
+@bot.command()
+async def duelstatus(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    opponent_id = active_duels[user_id]
+
+    embed = discord.Embed(
+        title="📊 **Status do Duelo**",
+        color=0x95a5a6
+    )
+
+    embed.add_field(
+        name=f"❤️ {ctx.author.display_name}",
+        value=f"HP: {duel_hp[user_id]}\nMana: {duel_mana[user_id]}/{duel_max_mana[user_id]}\nCartas na mão: {len(duel_hand[user_id])}\nCriaturas no campo: {len(duel_board[user_id])}",
+        inline=True
+    )
+
+    embed.add_field(
+        name=f"❤️ {ctx.guild.get_member(opponent_id).display_name}",
+        value=f"HP: {duel_hp[opponent_id]}\nMana: {duel_mana[opponent_id]}/{duel_max_mana[opponent_id]}\nCartas na mão: {len(duel_hand[opponent_id])}\nCriaturas no campo: {len(duel_board[opponent_id])}",
+        inline=True
+    )
+
+    current_player = ctx.author.display_name if duel_turns[user_id] else ctx.guild.get_member(opponent_id).display_name
+    embed.add_field(name="🎯 Vez atual:", value=current_player, inline=False)
+
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def endduel(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    user_id = ctx.author.id
+    if user_id not in active_duels:
+        await ctx.send("❌ Você não está em um duelo!")
+        return
+
+    opponent_id = active_duels[user_id]
+    opponent = ctx.guild.get_member(opponent_id)
+
+    embed = discord.Embed(
+        title="🏁 **Duelo Encerrado**",
+        description=f"{ctx.author.mention} encerrou o duelo contra {opponent.mention}.",
+        color=0x95a5a6
+    )
+
+    await ctx.send(embed=embed)
+
+    # Limpar duelo
+    cleanup_duel(user_id, opponent_id)
+    log_write(f"Duelo encerrado por {ctx.author.name}")
+
+def cleanup_duel(user_id, opponent_id):
+    """Limpa os dados do duelo."""
+    for uid in [user_id, opponent_id]:
+        if uid in active_duels:
+            del active_duels[uid]
+        if uid in duel_turns:
+            del duel_turns[uid]
+        if uid in duel_hp:
+            del duel_hp[uid]
+        if uid in duel_mana:
+            del duel_mana[uid]
+        if uid in duel_max_mana:
+            del duel_max_mana[uid]
+        if uid in duel_deck:
+            del duel_deck[uid]
+        if uid in duel_hand:
+            del duel_hand[uid]
+        if uid in duel_board:
+            del duel_board[uid]
+        if uid in duel_graveyard:
+            del duel_graveyard[uid]
+        if uid in duel_message_ids:
+            del duel_message_ids[uid]
+
+# ========== COMANDOS DE LAZER ==========
+
+@bot.command()
+async def meme(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    memes = [
+        "https://media.tenor.com/3btxH8B8L4MAAAAC/meme-cat.gif",
+        "https://media.tenor.com/9bH3PXztJ6MAAAAC/meme-doge.gif",
+        "https://media.tenor.com/uYP_kE8iRWYAAAAC/meme-pepe.gif",
+        "https://media.tenor.com/8PJrM5x3l2IAAAAC/meme-this-is-fine.gif"
+    ]
+
+    embed = discord.Embed(
+        title="😂 **Meme Aleatório**",
+        description="Aqui vai um meme pra alegrar seu dia!",
+        color=0xffd700
+    )
+    embed.set_image(url=random.choice(memes))
+
+    await ctx.send(embed=embed)
+    log_write(f"Meme enviado por {ctx.author.name}")
+
+@bot.command()
+async def joke(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    jokes = [
+        "Por que o computador foi ao médico? Porque tinha vírus! 🦠",
+        "O que o pato disse para a pata? Vem quá! 🦆",
+        "Por que o livro de matemática estava triste? Porque tinha muitos problemas! 📚",
+        "O que é que tem 4 patas e voa? Duas galinhas! 🐔",
+        "Por que o esqueleto não brigou com ninguém? Porque não tinha estômago para isso! 💀"
+    ]
+
+    embed = discord.Embed(
+        title="😂 **Piada Aleatória**",
+        description=random.choice(jokes),
+        color=0xffd700
+    )
+
+    await ctx.send(embed=embed)
+    log_write(f"Piada enviada por {ctx.author.name}")
+
+@bot.command()
+async def insult(ctx, target: discord.Member = None):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    insults = [
+        "é mais burro que uma porta!",
+        "tem QI de uma planta!",
+        "é tão feio que assusta espelho!",
+        "é mais lento que tartaruga carregando piano!",
+        "é tão chato que aborrece até bocejo!",
+        "é mais inútil que guarda-chuva no deserto!",
+        "é tão gordo que precisa de mapa pra se encontrar!",
+        "é mais velho que a invenção da roda!",
+        "é tão pobre que pede esmola pro mendigo!",
+        "é mais sujo que gambá no lixo!"
+    ]
+
+    if target is None:
+        target = ctx.author
+        embed = discord.Embed(
+            title="😈 **Auto-Insulto**",
+            description=f"{target.mention} {random.choice(insults)} 🤡",
+            color=0x8b4513
+        )
+    else:
+        embed = discord.Embed(
+            title="😈 **Insulto**",
+            description=f"{target.mention} {random.choice(insults)} 🤡",
+            color=0x8b4513
+        )
+
+    await ctx.send(embed=embed)
+    log_write(f"Insulto enviado por {ctx.author.name} para {target.name}")
+
+@bot.command()
+async def quote(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    quotes = [
+        "\"A vida é como um jogo, mas alguns preferem ficar assistindo.\" - Mestre dos Games",
+        "\"Quem ri por último, ri melhor. Mas quem ri primeiro, ri mais.\" - Palhaço Sábio",
+        "\"O importante não é vencer todos os dias, mas lutar todos os dias.\" - Lutador Anônimo",
+        "\"A preguiça é a mãe de todos os vícios, mas é uma ótima companhia.\" - Preguiçoso Filosofo",
+        "\"Se a vida te dá limões, faça uma limonada. Se der abacaxis, faça suco.\" - Cozinheiro Otimista"
+    ]
+
+    embed = discord.Embed(
+        title="💭 **Citação Inspiradora**",
+        description=random.choice(quotes),
+        color=0x9370db
+    )
+
+    await ctx.send(embed=embed)
+    log_write(f"Citação enviada por {ctx.author.name}")
+
+@bot.command()
+async def roll(ctx, sides: int = 6, count: int = 1):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    if sides < 2 or sides > 100:
+        await ctx.send("❌ Número de lados deve ser entre 2 e 100!")
+        return
+
+    if count < 1 or count > 10:
+        await ctx.send("❌ Número de dados deve ser entre 1 e 10!")
+        return
+
+    results = [random.randint(1, sides) for _ in range(count)]
+    total = sum(results)
+
+    embed = discord.Embed(
+        title="🎲 **Resultado dos Dados**",
+        color=0x32cd32
+    )
+
+    if count == 1:
+        embed.add_field(name=f"Dado de {sides} lados:", value=f"**{results[0]}**", inline=False)
+    else:
+        embed.add_field(name=f"{count} dados de {sides} lados:", value=f"Resultados: {', '.join(map(str, results))}\n**Total: {total}**", inline=False)
+
+    await ctx.send(embed=embed)
+    log_write(f"Dados rolados por {ctx.author.name}: {results} (total: {total})")
+
+@bot.command()
+async def flip(ctx):
+    if not is_welcome_channel(ctx):
+        await ctx.send("❌ Os comandos só funcionam no canal de boas-vindas do bot!")
+        return
+
+    result = random.choice(["Cara", "Coroa"])
+    emoji = "🪙" if result == "Cara" else "👑"
+
+    embed = discord.Embed(
+        title="🪙 **Cara ou Coroa**",
+        description=f"O resultado é: **{result}** {emoji}!",
+        color=0xffd700
+    )
+
+    await ctx.send(embed=embed)
+    log_write(f"Cara ou coroa por {ctx.author.name}: {result}")
 
 # Tratamento de erros de login
 try:
