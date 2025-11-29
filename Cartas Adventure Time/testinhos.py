@@ -578,29 +578,7 @@ async def endduel(ctx):
     else:
         await ctx.send(embed=result)
 
-def cleanup_duel(user_id, opponent_id):
-    """Limpa os dados do duelo."""
-    for uid in [user_id, opponent_id]:
-        if uid in active_duels:
-            del active_duels[uid]
-        if uid in duel_turns:
-            del duel_turns[uid]
-        if uid in duel_hp:
-            del duel_hp[uid]
-        if uid in duel_mana:
-            del duel_mana[uid]
-        if uid in duel_max_mana:
-            del duel_max_mana[uid]
-        if uid in duel_deck:
-            del duel_deck[uid]
-        if uid in duel_hand:
-            del duel_hand[uid]
-        if uid in duel_board:
-            del duel_board[uid]
-        if uid in duel_graveyard:
-            del duel_graveyard[uid]
-        if uid in duel_message_ids:
-            del duel_message_ids[uid]
+
 
 # ========== COMANDOS DE LAZER ==========
 
